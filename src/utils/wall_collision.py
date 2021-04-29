@@ -1,26 +1,51 @@
- 
-from src.utils.segment import Segment
-from src.utils.vector import Vector
-
 import numpy as np
 from random import random
+import numpy.ma as ma
+import numexpr
 
 # ----------------------------- Wall collision -------------------------- #
-def _collision_with_wall(pos, velocity, radius, segments, strategy = 'future'):
-    if(strategy == 'past'):
-        velocity = -1.0*velocity
-    min_time, idx_segment, min_pos_intersect = 1e15 ,-1, None
 
-    for i, segment in enumerate(segments):
-        t_coll, pos_intersect = _handler_wall_collision(pos, velocity, radius, segment.get_p1(), segment.get_p2(), strategy) # should add  -1.0*velocity if we are checking in the past...
-        #print(f'{i} : t_coll = {t_coll} ; intersect = {pos_intersect}')
-        if(t_coll<min_time):
-            idx_segment = i
-            min_time = t_coll
-            min_pos_intersect = pos_intersect
-    return min_time, idx_segment, min_pos_intersect
+def make_collisions(arr, a, ct, cp): # ct : collision time, cp : collision position
+    count = np.count_nonzero(~np.isinf(ct), axis = 1)%2  # tc>0
+    idxes = np.argmin(ct, axis = 1)
+    # count = [0, 0, 0, 1] for example, 0 if outside, 1 if inside.
 
-def _handler_wall_collision(position, velocity, radius, p1, p2, strategy = 'future'):
+    # with loop:
+    for k, c in enumerate(count) :
+        if(c==0):
+            # reflect
+            idx = idxes[k]
+            arr[[k],:] = _reflect_particle(arr[[k],:], a[[idx],:], ct[[k], [idx]], cp[[k], [idx]]) # arr, a, ct, cp
+
+    return arr
+
+def make_collisions_vectorized(arr, a, ct, cp): # ct : collision time, cp : collision position
+    idxes = np.argmin(ct, axis = 1)
+    count = np.count_nonzero(~np.isinf(ct), axis = 1)%2
+    count = ~count.astype(bool)
+    # ct = np.where(np.isinf(ct), 0, ct)
+    # count = [0, 0, 0, 1] for example, 0 if outside, 1 if inside.
+    # ---- Overhead to avoid the python loop (and multiple call to a function) ---:
+        # ct and cp mush be shrink in dimension, from (number of particles x number of walls) to (number of particles)
+        # a must be changes to a vector [number of particles], where is line is the required wall 
+        # all this depends on idxes which is of size [number of particles]
+    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze()
+    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze()
+    a_ = np.take_along_axis(a, idxes[:,None], axis = 0)[count, :]
+    arr[count,:] = _reflect_particle(arr[count,:], a_, ct_, cp_)
+    return arr
+
+
+pos_end_idx = 2
+
+# arr is number of particles x (pos_end_idx+3) - we use 3D velocity and 2D pos by default
+# walls is a 2D array consisting wall = np.array([x1, y1, x2, y2]) (for now)
+# these walls have been stored such that x1 < x2, in case x1 == x2, y1 < y2.
+
+def handler_wall_collision(arr, walls, a, radius): 
+    # TODO : je pense que je devrais passer tout ça sur 100% numpy et pas numexpr. En réalité, je risque pas d'utiliser souvent pour plusieurs particles (que celles qui sont sorties du système).
+    # boucle sur les particules a priori.
+    # En fait cet algo donne aussi la présence de la particule dans le système, puisque si on est dans le système, alors on a un nombre impair de murs avec lesquels on peut collisionner.
     """ Determine if there is a collision between the particule which position, velocity and radius 
     are given in parameters and the wall of index wall_indx.
     If there is, it compute the time to collision and update the events table.
@@ -59,82 +84,44 @@ def _handler_wall_collision(position, velocity, radius, p1, p2, strategy = 'futu
     Returns:
         int, MyVector: the time before the wall and particule collides. Return np.nan is no collision is possible. 
     """
-    # p index of the part
-
-    # angle
-    #theta = np.arccos(n.x) # np.sign(n.y) 
-
+    # since we are determining for past collisions, we have to velocity -> -velocity
     # a and b
-    dp = p2-p1
-    if(dp.x > 0):
-        stheta, ctheta = dp.y, dp.x
-    else:
-        stheta, ctheta = -dp.y, dp.x
+    ctheta, stheta, norm = a[:,0], a[:, 1], a[:, 2] # directing vector of the walls. Normalized !
+    p1x, p1y, p2x, p2y = walls[:,0], walls[:,1], walls[:,2], walls[:,3]  #   # np.split(walls, indices_or_sections=4, axis = 1)
+    x, y, vx, vy, vz = np.split(arr, indices_or_sections=5, axis = 1) # arr[:,0],  arr[:,1],  arr[:,2],  arr[:,3],  arr[:,4] # 
+    # split keeps the dimension constant, thus p1x is [number of particles x 1] which allow for the operation later on
+    # supposing p2x-p1x > 0
+    b = numexpr.evaluate("vx*stheta-vy*ctheta")  # -velocity.x*stheta+velocity.y*ctheta; stheta = p2y-p1y; ctheta = p2x-p1x
+    a_prime = numexpr.evaluate("(p1x-x)*stheta+(y-p1y)*ctheta")
 
-    b = -velocity.x*stheta+velocity.y*ctheta
-
-    if b == 0.0 :
-        return np.nan, None # TODO : should we add a tolerance ? It will never be equals to zero exactly...
+    # at this point b is 2D and b[i] returns b for all walls for particle i
     
-    a = -position.x*stheta+position.y*ctheta
-    
-    # new position of the wall in the new base
-    y1_new_base = -p1.x*stheta+p1.y*ctheta
-
-    a_prime = a-y1_new_base
-
     # possible collision time :
-    t_coll_1 = (-a_prime-2*radius)/b
-    t_coll_2 = (-a_prime+2*radius)/b
-    if(t_coll_1 < 0 or t_coll_2 <0):
-        return np.nan, None
+    t_coll_1 = np.full(shape=b.shape, fill_value=-1.)
+    t_coll_2 = np.full(shape=b.shape, fill_value=-1.)
 
-    if(strategy == 'past'): # stategy for finding a past collision
-        t_intersect = max(t_coll_1, t_coll_2)
-    elif(strategy=='future'): # stategy for finding a future collision
-        t_intersect = min(t_coll_1, t_coll_2)
-    else:
-        t_intersect = min(t_coll_1, t_coll_2)
-        print(f'Please choose between *past* (past collision) and *future* (future collision) for the strategy. You chose {strategy}. Default to *future*.')
-        
-    if(t_intersect > 0):
-        pos_intersect = position + t_intersect * velocity
+    np.divide((-a_prime-radius), b, out=t_coll_1, where=b!=0)
+    np.divide((-a_prime+radius), b, out=t_coll_2, where=b!=0)
 
-        # the reason why were are not using pos_intersect.norm is that it should be a 3D vector.
-        dP1, dP2, dP3 = p2-p1, \
-            pos_intersect-p1, p2-pos_intersect 
-        norm_1 = dP1.norm()
-
-        qty=dP1.inner(dP2)/(norm_1*norm_1) # norm_1 cant be 0 because wall segments are not on same points.
-        if(qty < 1 and qty > 0):
-            return t_intersect, pos_intersect
-
-    return np.nan, None
-
-def _reflect_particle(velocity, time, dp, pos_intersect):
-
-    # SPEED reflection
+    t_intersect = np.full(shape=b.shape, fill_value=np.inf)
+    t_intersect = np.maximum(t_coll_1, t_coll_2 , where = ((t_coll_2>0) & (t_coll_1>0)), out = t_intersect)
     
-    # angle
-    if(dp.x<0):
-        dp = -1.0*dp
-        
-    theta = float(np.sign(dp.y)*np.arccos(dp.x)) # angle between the directing vector and (0,1)
-    
-    # theta must be in degree .... 
-    theta = theta*180/np.pi
+    pix = numexpr.evaluate("x-t_intersect*vx")
+    piy = numexpr.evaluate("y-t_intersect*vy")
 
-    # old velocity
-    old_velocity = Vector(velocity.x, velocity.y) # in 2D
-    intermediary_velocity = old_velocity.rotate(-theta)
-    intermediary_velocity_2 = Vector(intermediary_velocity.x, -intermediary_velocity.y)
-    new_velocity_2d = intermediary_velocity_2.rotate(theta)
-    
-    # SETTING new velocity 
-    new_velocity_3d = Vector(new_velocity_2d.x, new_velocity_2d.y, velocity.z)
-    new_velocity = new_velocity_3d
+    qty = numexpr.evaluate("(ctheta*(pix-p1x)+(p2y-p1y)*stheta)/norm")  # dP1.inner(dP2)/(norm_1*norm_1) # norm_1 cant be 0 because wall segments are not on same points.
+    qty = np.where(~np.isnan(qty), qty, -1)
+    return t_intersect, np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
 
-    # POSITION reflection
-    new_pos = Vector(pos_intersect.x, pos_intersect.y, pos_intersect.z) + time*new_velocity_3d # (0.1*(0.5-random())+1)*
+def _reflect_particle(arr, a, ct, cp):
+    k1, k2 = 2*a[:,0]**2-1, -2*a[:,0]*a[:, 1] # 2*ctheta**2-1, -2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
 
-    return new_pos, new_velocity
+    # velocity after the collision
+    arr[:,2] = arr[:,2]*k1+ arr[:,3]*k2   # i.e. : vx = vx*k1+vy*k2
+    arr[:,3] = - arr[:,3]*k1+arr[:,2]*k2  # i.e. : vy = -vy*k1+vx*k2
+
+    # new position (we could add some scattering which we do not do there)
+    arr[:,0] = cp[:,0]+ct*arr[:,2] # new x pos 
+    arr[:,1] = cp[:,1]+ct*arr[:,3] # new y pos
+
+    return arr

@@ -14,10 +14,3 @@ def position_in_grid(pos, system_size, grid_size):
     """
     pos_in_grid = tuple([int(a*c/b) for a,b,c in zip(pos, system_size, grid_size)])
     return pos_in_grid
-
-def advection_handler(dt, list_particles, walls, update_fn, args, handle_wall_collision):
-    pass
-
-def handle_wall_collision(part, wall):
-    pass
-

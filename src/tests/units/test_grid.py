@@ -4,36 +4,30 @@ import numpy as np
 from src.utils.grid import Grid
 
 class TestGrid(unittest.TestCase):
-    
+    rx, ry = 33, 78
+    max_nb = 500
     def test_make_grid(self):
-        grid = Grid((3,2,2))
-
-        N = 12
-        list_objects = [k for k in range(N)]
-        positions_initialize = [(0,0,0), (0,0,1), (0,1,0), (0,1,1), (1,0,0),
-                                (1,0,1), (1,1,0), (1,1,1), (2,0,0), (2,0,1),
-                                (2,1,0), (2,1,1)]
-        new_positions = [(2,1,1),(0,0,0), (0,0,1), (0,1,0), (0,1,1), 
-                        (1,0,0), (1,0,1), (1,1,0), (1,1,1), (2,0,0), 
-                        (2,0,1), (2,1,0)]
-
-        for pos, o in zip(positions_initialize, list_objects):
-            grid.add(pos, o)
+        resolutions = np.array((self.rx, self.ry))
+        max_number_per_cell = self.max_nb
+        return Grid(resolutions = resolutions, max_number_per_cell=max_number_per_cell)
         
-        objects_list = grid.get_all()
-        self.assertTrue(all(a==b for a, b in zip(objects_list, [0,1,2,3,4,5,6,7,8,9,10,11])))
+    def test_add_and_remove(self):
+        grid = self.test_make_grid()
 
-        for old_pos, pos, o in zip(positions_initialize, new_positions, list_objects):
-            grid.update(old_pos, pos, o)
+        positions = [np.array([i,j], dtype = int) for i in range(self.rx) for j in range(self.ry)]
+        o = np.array([0,0])
+        for pos in positions:
+            grid.add(np.array(pos, o))
 
-        objects_list = grid.get_all()
-        self.assertTrue(all(a==b for a, b in zip(objects_list, [1,2,3,4,5,6,7,8,9,10,11,0])))
+        arr = np.random.uniform(low = 0, high = min(self.rx, self.y), size = (100,4))
+        grid.add_multiple(arr)
 
-        for pos, o in zip(new_positions, list_objects):
-            grid.remove(pos, o)
+        for row in arr :
+            pos = row[:2]
+            grid.delete(pos, 0)
 
-        objects_list = grid.get_all()
-        self.assertTrue(len(objects_list) == 0)
+    # TODO: when adding DYNAMIC array, then I should test it is in fact dynamic
+
 
 if __name__ == '__main__':
     unittest.main()

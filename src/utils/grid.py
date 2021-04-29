@@ -1,71 +1,61 @@
-from numpy.lib.index_tricks import ndenumerate
-from src.utils.linkedlist import LinkedList
-from src.utils.vector import Vector
 import numpy as np
 
-
 class Grid(object):
-
-    debug = False
-
-    def __init__(self, resolutions):
+    # Note : this 2D grid is not efficient as it is a grid of object of type ndarray and 2D.
+    # What could be done is to make a big 4D grid
+    def __init__(self, resolutions, max_number_per_cell):
         self.resolutions = resolutions
-        self.data_structure_class = LinkedList
-        self.grid = np.empty(resolutions, dtype = self.data_structure_class)
-        
-        # TODO: improved grid, which can, for example, save the number of objets / cell etc.
-        self.number_of_objects = 0
+        self.arr = np.empty(resolutions, dtype = np.ndarray) # not sure it really works actually
+
+        # forced to do that as slicing does not work on arrays of dtype = arrays
+        for lx in range(self.resolutions[0]):
+            for ly in range(self.resolutions[1]):
+                self.arr[lx,ly]=np.empty((max_number_per_cell, 2), dtype = int)
+            
+        self.current = np.zeros(resolutions, dtype = int)
 
     def add(self, pos, o): # pos must be a tuple
-        self.add_(pos, o)
-        self.number_of_objects += 1
+        self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]] = o
+        self.current[pos[0], pos[1]]+=1
 
-    def add_(self, pos, o): 
-        if(self.grid[pos] == None): # checking if we already created this list or not
-            self.grid[pos] = self.data_structure_class()
-            
-        self.grid[pos].insert(o)
+    def add_multiple(self, new_arr):
+        np.sort(new_arr.view('i8,i8,i8,i8'), order = ['f1','f2'], axis = 0).view(int)
+        pos_in_grids, indexes = np.unique(new_arr, return_index = True, axis = 0)
+        pos_in_grids = pos_in_grids[:,:2].astype(int)
+        l = len(pos_in_grids)
+        for k in range(1, l):
+            pos = pos_in_grids[k-1]
+            o = new_arr[indexes[k-1]:indexes[k], 2:]
+            self._add_multiple(pos, o)
+        pos = pos_in_grids[l-1]
+        o = new_arr[indexes[l-1]:, 2:]
+        self._add_multiple(pos, o)
 
-    def remove(self, pos, o):
-        self.remove_(pos, o)
-        self.number_of_objects -= 1
+    def _add_multiple(self, pos, o):
+        try :        
+            self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]] = o
+        except ValueError as e:
+            print(e)        
+            print(f'Max : {len(self.arr[pos[0], pos[1]])}')
+            print(f' pos : \n {pos} \n current : \n {self.current[pos[0], pos[1]]} \n shape o : \n {o.shape[0]}')
+            print(self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]])
+            raise ValueError
 
-    def remove_(self, pos, o):
-        self.grid[pos].delete(o)
+        self.current[pos[0], pos[1]] += o.shape[0]
 
-    def update(self, old_pos, pos, o):
+    def delete(self, pos, idx):
+        """Removes the element at index *idx*.
 
-        if(old_pos != pos):    
-            try :
-                self.add_(pos, o)
-            except IndexError: # (ValueError,):
-                print("New position {} not in grid.".format(pos))
-                return False
-            self.remove_(old_pos, o)
-        else :
-            if(self.debug):
-                print("Same positions.", end = "   [OK]")
+        Args:
+            pos (tuple): position in the grid of the element to be removed
+            idx (int): index of the element to be removed
+        """
+        self.arr[pos[0], pos[1]][idx] = self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]]
+        self.current[pos[0], pos[1]] -= 1
 
-        if(self.debug):
-            print("     [OK]")
-        return True
-    
     # ------------ Getter and setter ------------- #
-    def get(self, pos, return_list = True): 
-        data_structure = self.grid[pos]
-        if(return_list):
-            return data_structure.to_list()
-        else :
-            return data_structure
+    def get(self, pos): 
+        return self.arr[pos[0], pos[1]] # can return anything from a 2D array of particle (4D ndarray) to a particle index 
     
-    def get_all(self):
-        objects = []
-        for idxes, data_structure in np.ndenumerate(self.grid):
-            if(data_structure!=None):
-                for o in data_structure.to_list():
-                    objects.append(o)
-        return objects
-
-    def get_grid(self):
-        return self.grid
-    
+def pos_in_grid(pos, grid_res, offsets, system_shape):
+    return np.floor(np.subtract(pos,offsets)*grid_res/system_shape).astype(int)
