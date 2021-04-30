@@ -20,7 +20,7 @@ class SystemCreator(object):
         a = np.zeros((segments.shape[0], 3))
         for k, segment in enumerate(segments):
             x1, y1, x2, y2 = segment
-            a[k, 2] = np.linalg.norm(segment)
+            a[k, 2] = np.linalg.norm(segment[2:]-segment[:2])
             assert((x1!=x2) or (y1!=y2))
 
             if(x1>x2 or (x1==x2 and y1>y2)):

@@ -2,12 +2,14 @@ import numpy as np
 from random import random
 import numpy.ma as ma
 import numexpr
-
+from icecream import ic
 # ----------------------------- Wall collision -------------------------- #
 
 def make_collisions(arr, a, ct, cp): # ct : collision time, cp : collision position
-    count = np.count_nonzero(~np.isinf(ct), axis = 1)%2  # tc>0
+    count = np.count_nonzero(~np.isinf(ct), axis = 1) # problem when there is no collision to process with no wall whatsoever. Because 0 counts as requiring a collision to be processed...
+    count = np.where(count == 0, -1, count)%2 # not super optimal I think.
     idxes = np.argmin(ct, axis = 1)
+
     # count = [0, 0, 0, 1] for example, 0 if outside, 1 if inside.
 
     # with loop:
@@ -21,20 +23,39 @@ def make_collisions(arr, a, ct, cp): # ct : collision time, cp : collision posit
 
 def make_collisions_vectorized(arr, a, ct, cp): # ct : collision time, cp : collision position
     idxes = np.argmin(ct, axis = 1)
-    count = np.count_nonzero(~np.isinf(ct), axis = 1)%2
-    count = ~count.astype(bool)
+    count = np.count_nonzero(~np.isinf(ct), axis = 1) # problem when there is no collision to process with no wall whatsoever. Because 0 counts as requiring a collision to be processed...
+    count = ~(np.where(count == 0, -1, count)%2).astype(bool) # not super optimal I think.
+    # ic(np.sum(count, where = count == True))
+    
+    #count = ~count.astype(bool)
     # ct = np.where(np.isinf(ct), 0, ct)
     # count = [0, 0, 0, 1] for example, 0 if outside, 1 if inside.
     # ---- Overhead to avoid the python loop (and multiple call to a function) ---:
         # ct and cp mush be shrink in dimension, from (number of particles x number of walls) to (number of particles)
         # a must be changes to a vector [number of particles], where is line is the required wall 
         # all this depends on idxes which is of size [number of particles]
-    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze()
-    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze()
+    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze(axis=1)
+    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
     a_ = np.take_along_axis(a, idxes[:,None], axis = 0)[count, :]
     arr[count,:] = _reflect_particle(arr[count,:], a_, ct_, cp_)
     return arr
 
+def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls): # ct : collision time, cp : collision position
+    # basically the same function as make_collisions_vectorized, only we add some conditions
+
+    idxes = np.argmin(ct, axis = 1)
+    idxes_out_bool = np.isin(idxes, idx_out_walls)
+    idxes_out = np.where(idxes_out_bool)
+
+    count = np.count_nonzero(~np.isinf(ct), axis = 1) # problem when there is no collision to process with no wall whatsoever. Because 0 counts as requiring a collision to be processed...
+    count = ~(np.where(count == 0, 1, count)%2).astype(bool) # not super optimal I think.
+    count = np.where(count & idxes_out_bool)
+
+    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze(axis=1)
+    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
+    a_ = np.take_along_axis(a, idxes[:,None], axis = 0)[count, :]
+    arr[count,:] = _reflect_particle(arr[count,:], a_, ct_, cp_)
+    return arr, idxes_out # the indexes in arr of the particles that got out of the system by out_walls
 
 pos_end_idx = 2
 
@@ -104,14 +125,14 @@ def handler_wall_collision(arr, walls, a, radius):
     np.divide((-a_prime+radius), b, out=t_coll_2, where=b!=0)
 
     t_intersect = np.full(shape=b.shape, fill_value=np.inf)
-    t_intersect = np.maximum(t_coll_1, t_coll_2 , where = ((t_coll_2>0) & (t_coll_1>0)), out = t_intersect)
+    t_intersect = np.maximum(t_coll_1, t_coll_2 , where = ((t_coll_2>0) | (t_coll_1>0)), out = t_intersect)
     
     pix = numexpr.evaluate("x-t_intersect*vx")
     piy = numexpr.evaluate("y-t_intersect*vy")
 
-    qty = numexpr.evaluate("(ctheta*(pix-p1x)+(p2y-p1y)*stheta)/norm")  # dP1.inner(dP2)/(norm_1*norm_1) # norm_1 cant be 0 because wall segments are not on same points.
+    qty = numexpr.evaluate("(ctheta*(pix-p1x)+stheta*(piy-p1y))/norm")  # dP1.inner(dP2)/(norm_1*norm_1) # norm_1 cant be 0 because wall segments are not on same points.
     qty = np.where(~np.isnan(qty), qty, -1)
-    return t_intersect, np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
+    return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
 
 def _reflect_particle(arr, a, ct, cp):
     k1, k2 = 2*a[:,0]**2-1, -2*a[:,0]*a[:, 1] # 2*ctheta**2-1, -2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster

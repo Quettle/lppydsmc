@@ -1,5 +1,7 @@
 import numpy as np
 
+from icecream import ic
+
 class Grid(object):
     # Note : this 2D grid is not efficient as it is a grid of object of type ndarray and 2D.
     # What could be done is to make a big 4D grid
@@ -19,7 +21,7 @@ class Grid(object):
         self.current[pos[0], pos[1]]+=1
 
     def add_multiple(self, new_arr):
-        np.sort(new_arr.view('i8,i8,i8,i8'), order = ['f1','f2'], axis = 0).view(int)
+        new_arr = np.sort(new_arr.view('i8,i8,i8,i8'), order = ['f0','f1'], axis = 0).view(int)
         pos_in_grids, indexes = np.unique(new_arr, return_index = True, axis = 0)
         pos_in_grids = pos_in_grids[:,:2].astype(int)
         l = len(pos_in_grids)
@@ -34,12 +36,12 @@ class Grid(object):
     def _add_multiple(self, pos, o):
         try :        
             self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]] = o
-        except ValueError as e:
-            print(e)        
-            print(f'Max : {len(self.arr[pos[0], pos[1]])}')
-            print(f' pos : \n {pos} \n current : \n {self.current[pos[0], pos[1]]} \n shape o : \n {o.shape[0]}')
-            print(self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]])
-            raise ValueError
+        except Exception as e:
+            ic(e)        
+            ic(f'Max : {len(self.arr[pos[0], pos[1]])}')
+            ic(f' pos : \n {pos} \n current : \n {self.current[pos[0], pos[1]]} \n shape o : \n {o.shape[0]}')
+            ic(self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]])
+            raise e
 
         self.current[pos[0], pos[1]] += o.shape[0]
 
@@ -57,5 +59,8 @@ class Grid(object):
     def get(self, pos): 
         return self.arr[pos[0], pos[1]] # can return anything from a 2D array of particle (4D ndarray) to a particle index 
     
+    def get_current(self, pos):
+        return self.current[pos[0], pos[1]]
+
 def pos_in_grid(pos, grid_res, offsets, system_shape):
     return np.floor(np.subtract(pos,offsets)*grid_res/system_shape).astype(int)

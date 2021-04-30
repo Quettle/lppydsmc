@@ -30,7 +30,7 @@ class Particle(object):
         return np.array([mass, charge, radius, cross_section]) # *self.mp, *charge
 
     def _compute_cross_section(self, radius):
-        return np.pi*(2*radius)**2
+        return np.pi*4*(radius)**2
 
     # -------------------- Updating the list -------------------- #
     def add(self, o): # pos must be a tuple
@@ -47,7 +47,7 @@ class Particle(object):
         Args:
             idx (int): index of the element to be removed
         """
-        self.arr[idx] = self.arr[self.current]
+        self.arr[idx] = self.arr[self.current-1]
         self.current -= 1
     
     def pop(self, idx):
@@ -59,8 +59,8 @@ class Particle(object):
         Returns:
             ndarray: the removed element
         """
-        tmp = self.arr[idx]
-        self.arr[idx] = self.arr[self.current]
+        tmp = np.copy(self.arr[idx])
+        self.arr[idx] = self.arr[self.current-1] # the last one is moved before
         self.current -= 1
         return tmp
 
@@ -72,7 +72,7 @@ class Particle(object):
         """
         for idx in range(self.current):
             if(self.arr[idx] == o): # same object # np.array_equal(self.arr[idx], o) => same values
-                self.arr[idx] = self.arr[self.current]
+                self.arr[idx] = self.arr[self.current-1]
                 self.current -= 1
                 break
 
