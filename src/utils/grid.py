@@ -55,6 +55,11 @@ class Grid(object):
         self.arr[pos[0], pos[1]][idx] = self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]]
         self.current[pos[0], pos[1]] -= 1
 
+    def reset(self):
+        """Reset the indexes of the grids.
+        """
+        self.current[:,:] = 0
+        
     # ------------ Getter and setter ------------- #
     def get(self, pos): 
         return self.arr[pos[0], pos[1]] # can return anything from a 2D array of particle (4D ndarray) to a particle index 

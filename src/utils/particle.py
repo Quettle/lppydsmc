@@ -38,9 +38,14 @@ class Particle(object):
         self.current+=1
 
     def add_multiple(self, o):
-        self.arr[self.current:self.current+o.shape[0]] = o
+        self.arr[self.current:self.current+o.shape[0]] = o[:]
         self.current+=o.shape[0]
- 
+    
+    def delete_multiple(self, idxes):
+        # we could use np.delete() however it changes the size of the return arrays so we have to be more careful
+        self.arr[idxes.shape[0]:,:] = np.delete(self.arr, idxes, axis = 0) # operation is not inplace
+        self.current-=idxes.shape[0]
+
     def delete(self, idx):
         """Removes the element at index *idx*.
 
@@ -85,4 +90,4 @@ class Particle(object):
         return self.current
 
     def get_particles(self):
-        return self.arr
+        return self.arr[:self.current]

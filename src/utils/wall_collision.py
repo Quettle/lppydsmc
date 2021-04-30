@@ -42,17 +42,14 @@ def make_collisions_vectorized(arr, a, ct, cp): # ct : collision time, cp : coll
 
 def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls): # ct : collision time, cp : collision position
     # basically the same function as make_collisions_vectorized, only we add some conditions
-
     idxes = np.argmin(ct, axis = 1)
     idxes_out_bool = np.isin(idxes, idx_out_walls)
-    idxes_out = np.where(idxes_out_bool)
-
+    idxes_out = np.where(idxes_out_bool)[0]
     count = np.count_nonzero(~np.isinf(ct), axis = 1) # problem when there is no collision to process with no wall whatsoever. Because 0 counts as requiring a collision to be processed...
     count = ~(np.where(count == 0, 1, count)%2).astype(bool) # not super optimal I think.
-    count = np.where(count & idxes_out_bool)
-
-    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze(axis=1)
-    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
+    count = np.where(count & idxes_out_bool, True, False)
+    cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze()
+    ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze()
     a_ = np.take_along_axis(a, idxes[:,None], axis = 0)[count, :]
     arr[count,:] = _reflect_particle(arr[count,:], a_, ct_, cp_)
     return arr, idxes_out # the indexes in arr of the particles that got out of the system by out_walls

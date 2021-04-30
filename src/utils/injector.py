@@ -1,5 +1,5 @@
 import numpy as np
-
+from icecream import ic
 # TODO : this functions may also be cythonized.
 
 def inject(in_wall, in_vect, debit, vel_std, radius, dt, remains = 0):
@@ -13,6 +13,7 @@ def inject(in_wall, in_vect, debit, vel_std, radius, dt, remains = 0):
         # and then rotating the velocity so we have speed along the right vector.
         inject_qty_frac = dt * debit + remains
         inject_qty = int(inject_qty_frac)
+        ic(inject_qty)
         remains = inject_qty_frac-inject_qty
         
         # rotating coefficients 
