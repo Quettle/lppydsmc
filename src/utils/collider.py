@@ -1,5 +1,5 @@
 import numpy as np
-import icecream as ic
+from icecream import ic
 # TODO :
 # * Test it for one type of particle
 # * See formulas for various types of particles (mass, cross section) - it would need an adaptations as we have to store (pmax)pq for each p, q species. 
@@ -8,17 +8,40 @@ import icecream as ic
 # so I should not DO everything like that but maybe include it in a bigger functions
 # which would be much better
 
-def collider(arr, grid, currents, dt, average, pmax, cross_section, volume_cell, mr, remains):
+def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_section, volume_cell, mr, remains):
+    # works in place for arr but may take very long ...
+    # TODO : may return acceptance rates, and stuff like that...
+    collisions = np.zeros(grid.shape)
     remains, cands = candidates(currents, dt, average, pmax, volume_cell, mr, remains)
-    
-    for k, (i, j) in enumerate(np.ndindex(currents)):
+    for k, (i, j) in enumerate(np.ndindex(currents.shape)): # TODO : parallelize
         if(cands[i,j]>0):
-            array = grid.get([i,j])
+            #iccands[i,j])
             choice = index_choosen_couples(currents[i,j], int(cands[i,j]))
-            vr_norm = np.linalg.norm((array[choice][:,1,2:]-array[choice][:,0,2:]), axis = 1)
+
+            g = grid[i,j]
+            parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
+            array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
+
+            #icarray.shape)
+            
+            vr_norm = np.linalg.norm((array[:,1,2:]-array[:,0,2:]), axis = 1)
+            #icvr_norm.shape)
+
             proba = probability(vr_norm = vr_norm, pmax = pmax, cross_sections = cross_section)
+            #icproba.shape)
+
+            # TODO : should update pmax here (or return something)...
             collidings_couples = is_colliding(proba)
-            array[choice[collidings_couples]] = reflect(array[choice[collidings_couples]], vr_norm[collidings_couples])
+            collisions[i,j]+=collidings_couples.shape[0]
+            #iccollidings_couples.shape)
+            array[collidings_couples] = reflect(array[collidings_couples], vr_norm[collidings_couples])
+
+            for k in range(len(array)):
+                c1, c2 = array[k,0], array[k,1]
+                c = parts[k]
+                arr[c[0,0]][c[0,1]][:] = c1 # copy
+                arr[c[1,0]][c[1,1]][:] = c2
+    return remains, collisions
 
 def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
     """ Returns the number of candidates couples to perform dsmc collisions between particles. Note that this formula is for one type of particle only.
@@ -50,7 +73,7 @@ def index_choosen_couples(current, candidates): # per cell - I dont see how we c
 def probability(vr_norm, pmax, cross_sections): # still per cell
     # vr_norm should be : np.linalg.norm((arr[choices][:,1,2:]-arr[choices][:,0,2:]), axis = 1)
     # returns a list of [True, False, etc.]
-    return vr_norm*cross_sections/pmax
+    return cross_sections/pmax*vr_norm
     # in theory, cross_sections is already present in pmax, so we could simplify it in the future (it is required though for different cross-sections and all)
     # returns an array of the size of len(choices) with the probability over each dimension
 
@@ -59,6 +82,7 @@ def is_colliding(proba):
     return np.where(proba>r, 1,0).astype(bool)
 
 def reflect(arr, vr_norm):
+    
     # reflection for an array containing the colliging couple
     # arr here is in fact arr[is_colliding(proba)] 
     # the colliding couples are already selected

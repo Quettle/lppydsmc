@@ -76,5 +76,12 @@ class Grid(object):
     def get_current(self, pos):
         return self.current[pos[0], pos[1]]
 
+    def get_currents(self):
+        return self.current
+    
+    def get_grid(self):
+        return self.arr
+
+
 def pos_in_grid(pos, grid_res, offsets, system_shape):
     return np.floor(np.subtract(pos,offsets)*grid_res/system_shape).astype(int)

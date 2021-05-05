@@ -5,4 +5,4 @@ from .schemes import euler_explicit, leap_frog
 from .advector import advect
 from .particle import Particle
 from .grid import Grid, pos_in_grid
-from .collider import candidates, index_choosen_couples, probability, is_colliding, reflect
+from .collider import candidates, index_choosen_couples, probability, is_colliding, reflect, handler_particles_collisions
