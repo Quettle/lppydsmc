@@ -17,7 +17,7 @@ class TestParticle(unittest.TestCase):
 
         self.assertTrue(np.array_equal(container.get_params(), np.array([mass, charge, radius, 4*np.pi*radius**2])))
         self.assertTrue(container.get_current()==0)
-        self.assertTrue(container.get_particles().shape == (size_array, 5)) # should be empty too
+        self.assertTrue(container.get_particles().shape == (0, 5)) # should be empty too
         
         return container
 
