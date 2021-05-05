@@ -8,6 +8,18 @@ import icecream as ic
 # so I should not DO everything like that but maybe include it in a bigger functions
 # which would be much better
 
+def collider(arr, grid, currents, dt, average, pmax, cross_section, volume_cell, mr, remains):
+    remains, cands = candidates(currents, dt, average, pmax, volume_cell, mr, remains)
+    
+    for k, (i, j) in enumerate(np.ndindex(currents)):
+        if(cands[i,j]>0):
+            array = grid.get([i,j])
+            choice = index_choosen_couples(currents[i,j], int(cands[i,j]))
+            vr_norm = np.linalg.norm((array[choice][:,1,2:]-array[choice][:,0,2:]), axis = 1)
+            proba = probability(vr_norm = vr_norm, pmax = pmax, cross_sections = cross_section)
+            collidings_couples = is_colliding(proba)
+            array[choice[collidings_couples]] = reflect(array[choice[collidings_couples]], vr_norm[collidings_couples])
+
 def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
     """ Returns the number of candidates couples to perform dsmc collisions between particles. Note that this formula is for one type of particle only.
 
@@ -23,16 +35,17 @@ def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
         (ndarray - 2D - float, ndarray - 2D - int) : the number of candidates to select per cell to perform collisions - fractional part first and then int part.
     """
     # for one type of particle for now
-    return np.modf(0.5*currents*average*pmax*mr/volume_cell*dt+remains) # (Nc Nc_avg mr (sigma vr)max dt)*/(2V_c)
+    remains, cands = np.modf(0.5*currents*average*pmax*mr/volume_cell*dt+remains) # (Nc Nc_avg mr (sigma vr)max dt)*/(2V_c)
+    return remains, cands.astype(int) 
 
 def index_choosen_couples(current, candidates): # per cell - I dont see how we can vectorize it as the number of candidates per cell depends on the cell.
     # in the future, it will be parallized so it should be ok.
     try :
-        return np.random.default_rng().choice(current, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
+        return np.random.default_rng().choice(current-1, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
     except ValueError as e:
         print(e) 
         print(f'{current} < 2 x {candidates} => Some macro-particles will collide several times during the time step.')
-        return np.random.default_rng().choice(current, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
+        return np.random.default_rng().choice(current-1, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
 
 def probability(vr_norm, pmax, cross_sections): # still per cell
     # vr_norm should be : np.linalg.norm((arr[choices][:,1,2:]-arr[choices][:,0,2:]), axis = 1)

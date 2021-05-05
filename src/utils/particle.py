@@ -19,6 +19,7 @@ class Particle(object):
             radius (float): the radius of the particle
             size_array (int): max size of the array (memory is allocated before the simulation for performance arguments)
         """
+        self.size_array = size_array
         self.arr = np.empty(shape = (size_array, 5), dtype = float)
         self.current = 0
         self.part_type = part_type
@@ -43,7 +44,7 @@ class Particle(object):
     
     def delete_multiple(self, idxes):
         # we could use np.delete() however it changes the size of the return arrays so we have to be more careful
-        self.arr[idxes.shape[0]:,:] = np.delete(self.arr, idxes, axis = 0) # operation is not inplace
+        self.arr[:self.size_array-idxes.shape[0],:] = np.delete(self.arr, idxes, axis = 0) # operation is not inplace
         self.current-=idxes.shape[0]
 
     def delete(self, idx):
