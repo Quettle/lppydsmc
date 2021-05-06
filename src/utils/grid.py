@@ -36,7 +36,11 @@ class Grid(object):
             self._add_multiple(pos, o)
 
     def _add_multiple(self, pos, o):
-        self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]] = o
+        try :
+            self.arr[pos[0], pos[1]][self.current[pos[0], pos[1]]:self.current[pos[0], pos[1]]+o.shape[0]] = o
+        except Exception as e:
+            ic(o)
+            raise e
         # try :
         # except Exception as e: 
             #ic('Error :')

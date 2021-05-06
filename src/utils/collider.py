@@ -61,14 +61,15 @@ def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
     remains, cands = np.modf(0.5*currents*average*pmax*mr/volume_cell*dt+remains) # (Nc Nc_avg mr (sigma vr)max dt)*/(2V_c)
     return remains, cands.astype(int) 
 
-def index_choosen_couples(current, candidates): # per cell - I dont see how we can vectorize it as the number of candidates per cell depends on the cell.
+def index_choosen_couples(current, candidates, verbose = False): # per cell - I dont see how we can vectorize it as the number of candidates per cell depends on the cell.
     # in the future, it will be parallized so it should be ok.
     try :
-        return np.random.default_rng().choice(current-1, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
+        return np.random.default_rng().choice(current, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
     except ValueError as e:
-        print(e) 
-        print(f'{current} < 2 x {candidates} => Some macro-particles will collide several times during the time step.')
-        return np.random.default_rng().choice(current-1, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
+        if(verbose):
+            print(e) 
+            print(f'{current} < 2 x {candidates} => Some macro-particles will collide several times during the time step.')
+        return np.random.default_rng().choice(current, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
 
 def probability(vr_norm, pmax, cross_sections): # still per cell
     # vr_norm should be : np.linalg.norm((arr[choices][:,1,2:]-arr[choices][:,0,2:]), axis = 1)
