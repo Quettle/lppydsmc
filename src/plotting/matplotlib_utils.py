@@ -6,7 +6,7 @@ def plot_boundaries(ax, segments, color = 'k'):
     for k in range(segments.shape[0]):
         ax.plot(segments[k, [0,2]], segments[k, [1,3]], color = color)
 
-def plot_particles(ax, arr, r, arrows = True, factor = 0.01, color = 'b', arrow_color = 'r'): 
+def plot_particles(ax, arr, r, arrows = False, factor = 0.01, color = 'b', arrow_color = 'r', line = False): 
     # Arr is a 2D nd array, where arr[int] = particle = [x,y,vx,vy,vz]
     ax.scatter(arr[:,0], arr[:,1], s = np.pi*r*r, color = color)
     if(arrows):
@@ -14,7 +14,10 @@ def plot_particles(ax, arr, r, arrows = True, factor = 0.01, color = 'b', arrow_
             ax.arrow(arr[k,0], arr[k,1], dx = factor*1.5*r*arr[k,2], dy = factor*1.5*r*arr[k,3], 
                     width = factor*0.1*r*0.3, head_width = 3*factor*r*0.3, head_length = 1.5*factor*r*0.3,  \
                         length_includes_head = True, color = arrow_color)
-                
+    if(line):
+        for k in range(arr.shape[0]):
+            ax.plot([arr[k,0]+10*factor*1.5*r*arr[k,2], arr[k,0]-10*factor*1.5*r*arr[k,2]],[arr[k,1]+10*factor*1.5*r*arr[k,3], arr[k,1]-10*factor*1.5*r*arr[k,3]], '--', color = 'g')
+
 def plot_grid(ax, gs, ss, offset = np.array([0,0]), color = 'g'):
     # gs : grid shape
     # ss : system shape
