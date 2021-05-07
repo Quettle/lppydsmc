@@ -8,7 +8,10 @@ def plot_boundaries(ax, segments, color = 'k'):
 
 def plot_particles(ax, arr, r, arrows = False, factor = 0.01, color = 'b', arrow_color = 'r', line = False): 
     # Arr is a 2D nd array, where arr[int] = particle = [x,y,vx,vy,vz]
-    ax.scatter(arr[:,0], arr[:,1], s = np.pi*r*r, color = color)
+    if(type(color) == str):
+        ax.scatter(arr[:,0], arr[:,1], s = np.pi*r*r, color = color)
+    else:
+        ax.scatter(arr[:,0], arr[:,1], s = np.pi*r*r, c = color)
     if(arrows):
         for k in range(arr.shape[0]):
             ax.arrow(arr[k,0], arr[k,1], dx = factor*1.5*r*arr[k,2], dy = factor*1.5*r*arr[k,3], 

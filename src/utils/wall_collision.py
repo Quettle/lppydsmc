@@ -45,15 +45,21 @@ def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, old_count = None): 
     # basically the same function as make_collisions_vectorized, only we add some conditions
     idxes = np.argmin(ct, axis = 1)
     idxes_out_bool = np.isin(idxes, idx_out_walls) # if the wall for min collision time is in idx_out_walls 
-    idxes_out = np.where(idxes_out_bool)[0] # indexes of particles out of the system (certain may still not be, we need to verify it is not in the system)
-                                            # True if out of the system (and thus we should not compute collisions for theses ones)
     
     # getting actual collision
     count = np.count_nonzero(~np.isinf(ct), axis = 1) 
     count = ~(np.where(count == 0, 1, count)%2).astype(bool) # not super optimal I think.
                                                             # True if it should collide
+
+    
+
     # processing only collision that are at the same time true collisions and not with the out wall
-    count = np.where(count &  ~idxes_out_bool, True, False)
+    # TODO : clean it
+    count_ = np.where(count &  ~idxes_out_bool, True, False)
+    idxes_out_bool = np.where(count & idxes_out_bool, True, False) # Out of the system and should collide
+    idxes_out = np.where(idxes_out_bool)[0] # indexes of particles out of the system (certain may still not be, we need to verify it is not in the system)
+                                            # True if out of the system (and thus we should not compute collisions for theses ones)
+    count = count_
 
     if(old_count is not None):
         c = np.where(old_count)[0]
@@ -169,7 +175,7 @@ def _reflect_particle(arr, a, ct, cp):
 
     return arr
 
-def handler_wall_collision_point(arr, walls, a): # particles are considered as points
+def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # particles are considered as points
     # TODO : je pense que je devrais passer tout ça sur 100% numpy et pas numexpr. En réalité, je risque pas d'utiliser souvent pour plusieurs particles (que celles qui sont sorties du système).
     # boucle sur les particules a priori.
     # En fait cet algo donne aussi la présence de la particule dans le système, puisque si on est dans le système, alors on a un nombre impair de murs avec lesquels on peut collisionner.
@@ -245,6 +251,7 @@ def handler_wall_collision_point(arr, walls, a): # particles are considered as p
     # ic(qty)
 
     qty = np.where(~np.isnan(qty), qty, -1)
+
     return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
 
 def _reflect_particle(arr, a, ct, cp):
@@ -259,3 +266,12 @@ def _reflect_particle(arr, a, ct, cp):
     arr[:,1] = cp[:,1]+ct*arr[:,3] # new y pos
 
     return arr
+
+
+def deal_with_corner(ct):
+    # very inefficient
+    for k in range(ct.shape[0]):
+        ct_, indexes = np.unique(ct[k], return_index = True)
+        if(ct_.shape != ct[k].shape):
+            ct[k, :] = np.inf
+            ct[k, indexes] = ct_
