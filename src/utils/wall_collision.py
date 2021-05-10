@@ -161,19 +161,6 @@ def handler_wall_collision(arr, walls, a, radius):
     qty = np.where(~np.isnan(qty), qty, -1)
     return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
 
-def _reflect_particle(arr, a, ct, cp):
-    k1, k2 = 2*a[:,0]**2-1, -2*a[:,0]*a[:, 1] # 2*ctheta**2-1, -2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
-
-    # velocity after the collision
-    arr[:,2] = arr[:,2]*k1+ arr[:,3]*k2   # i.e. : vx = vx*k1+vy*k2
-    arr[:,3] = - arr[:,3]*k1+arr[:,2]*k2  # i.e. : vy = -vy*k1+vx*k2
-
-    # new position (we could add some scattering which we do not do there)
-    arr[:,0] = cp[:,0]+ct*arr[:,2] # new x pos 
-    arr[:,1] = cp[:,1]+ct*arr[:,3] # new y pos
-
-    return arr
-
 def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # particles are considered as points
     # TODO : je pense que je devrais passer tout ça sur 100% numpy et pas numexpr. En réalité, je risque pas d'utiliser souvent pour plusieurs particles (que celles qui sont sorties du système).
     # boucle sur les particules a priori.
@@ -254,7 +241,8 @@ def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # par
     return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
 
 def _reflect_particle(arr, a, ct, cp):
-    k1, k2 = 2*a[:,0]**2-1, -2*a[:,0]*a[:, 1] # 2*ctheta**2-1, -2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
+    # be careful, Theta is the opposite of the angle between the wall and the default coord system.
+    k1, k2 = 2*a[:,0]**2-1, 2*a[:,0]*a[:, 1] # 2*ctheta**2-1, 2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
 
     # velocity after the collision
     arr[:,2] = arr[:,2]*k1+ arr[:,3]*k2   # i.e. : vx = vx*k1+vy*k2
@@ -266,7 +254,7 @@ def _reflect_particle(arr, a, ct, cp):
 
     return arr
 
-
+# very useless
 def deal_with_corner(ct):
     # very inefficient
     for k in range(ct.shape[0]):

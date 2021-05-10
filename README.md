@@ -8,5 +8,5 @@ python -m unittest discover
 
 ## Installing the environment
 ```
-conda create --name lpp python=3.9 pandas numpy matplotlib tqdm notebook jupyterlab numexpr pytables
+conda create --name lpp python=3.9 pandas numpy matplotlib tqdm notebook jupyterlab numexpr pytables seaborn
 ```
