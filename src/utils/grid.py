@@ -88,3 +88,9 @@ class Grid(object):
 
 def pos_in_grid(pos, grid_res, offsets, system_shape):
     return np.floor(np.subtract(pos,offsets)*grid_res/system_shape).astype(int)
+
+def convert_to_grid_datatype(positions, new, old = 0):
+    index_container = np.zeros((new-old))
+    index_in_container = np.arange(old, new)
+    indexes = np.stack((index_container, index_in_container), axis = 1)
+    return np.concatenate((positions, indexes), axis = 1).astype(int)

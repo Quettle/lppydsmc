@@ -27,3 +27,12 @@ def maxwellian_mean_speed(T,m):
 # Maxwellian flux
 def maxwellian_flux(density, v_mean, drift = 0):
     return 0.25*density*v_mean+density*drift
+
+# ---------------------- Mean free path - time ------------------------- #
+
+def mean_free_path(cross_section, density):
+    return 1/(cross_section*density)
+
+def mean_free_time(mfp, v_mean):
+    return mfp/v_mean
+    

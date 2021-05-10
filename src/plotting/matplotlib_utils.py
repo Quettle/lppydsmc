@@ -1,6 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+def plot_system(arr, segments, radius, gs, ss, offset):
+    fig, ax = plt.subplots()
+    plot_grid(ax, gs, ss, offset)
+    plot_boundaries(ax, segments)
+    if(arr is not None):
+        plot_particles(ax, arr, radius)
+    ax.axis('equal')
+    return fig, ax
+
 def plot_boundaries(ax, segments, color = 'k'):
     # segments is a 2D nd array, where segmment[int] = segment = [x1, y1, x2, y2]
     for k in range(segments.shape[0]):
