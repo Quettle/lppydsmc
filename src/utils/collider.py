@@ -1,5 +1,4 @@
 import numpy as np
-from icecream import ic
 # TODO :
 # * Test it for one type of particle
 # * See formulas for various types of particles (mass, cross section) - it would need an adaptations as we have to store (pmax)pq for each p, q species. 

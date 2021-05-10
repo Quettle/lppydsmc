@@ -1,6 +1,5 @@
 import numpy as np
 
-from icecream import ic
 
 class Grid(object):
     # Note : this 2D grid is not efficient as it is a grid of object of type ndarray and 2D.

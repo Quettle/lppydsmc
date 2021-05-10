@@ -1,5 +1,4 @@
 import numpy as np
-from icecream import ic
 # TODO : this functions may also be cythonized.
 
 def inject(in_wall, in_vect, debit, vel_std, radius, dt, remains = 0):

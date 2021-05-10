@@ -2,7 +2,6 @@ import numpy as np
 from random import random
 import numpy.ma as ma
 import numexpr
-from icecream import ic
 # ----------------------------- Wall collision -------------------------- #
 
 # NOTE : THE THREE FOLLOWING FUNCTIONS ARE INPLACE
