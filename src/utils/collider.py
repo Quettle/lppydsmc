@@ -12,6 +12,9 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     # TODO : may return acceptance rates, and stuff like that...
     collisions = np.zeros(grid.shape)
     remains, cands = candidates(currents, dt, average, pmax, volume_cell, mr, remains)
+
+    # new_pmax = np.copy(pmax)
+    
     if(monitoring):
         monitor = np.array([0, 0, 0]) # norm, proba, qty
 
@@ -23,14 +26,18 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
             array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
 
-            
             vr_norm = np.linalg.norm((array[:,1,2:]-array[:,0,2:]), axis = 1)
             d = np.linalg.norm((array[:,1,:2]-array[:,0,:2]), axis = 1)
-            proba = probability(vr_norm = vr_norm, pmax = pmax, cross_sections = cross_section)
+            proba = probability(vr_norm = vr_norm, pmax = pmax[i,j], cross_sections = cross_section)
 
             if(monitoring): # summed over all the cells for now
                 monitor = monitor + np.array([np.sum(d), np.sum(proba), proba.shape[0]])
+            
             # TODO : should update pmax here (or return something)...
+            max_proba = np.max(proba)
+            if(max_proba>1):
+                pmax[i,j] = max_proba*pmax[i,j]
+            
             collidings_couples = is_colliding(proba)
             collisions[i,j]+=collidings_couples.shape[0]
 
@@ -43,9 +50,9 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
                 arr[c[1,0]][c[1,1]][:] = c2
 
     if(monitoring):
-        return remains, collisions, monitor
+        return remains, collisions, pmax, monitor # in theory it is useless to return pmax
     else:
-        return remains, collisions
+        return remains, collisions, pmax
 
 def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
     """ Returns the number of candidates couples to perform dsmc collisions between particles. Note that this formula is for one type of particle only.
