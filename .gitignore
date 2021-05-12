@@ -1,5 +1,6 @@
 # perso
 results/
+meetings/
 *.h5
 *.npy
 # Byte-compiled / optimized / DLL files
