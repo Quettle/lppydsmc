@@ -49,14 +49,14 @@ def SI_unit(val):
         return '$m.s^{-1}$'
     elif(val ==  'v2'):
         return '$m^2.s^{-2}$'
-    elif(val in ['x', 'y', 'z']):
+    elif(val in ['x', 'y', 'z','distance']):
         return '$m$'
     elif(val in ['t', 'time']):
         return 's'
-    elif(val in ['iteration']):
-        return '# of $T_{save}$'
-    elif(val in ['quantity']):
+    elif(val in ['iteration', 'quantity']):
         return '#'
+    elif(val in ['mass flow rate']):
+        return '$kg.s^{-1}$'
     else:
         return ''
     
@@ -84,7 +84,7 @@ def hist2d(ax, df, x = 'x', y ='y', stat = 'density', bins = 10, weights = None)
 def nb_particles_evolution(ax, df, times = None):
     # we do a group by
     if(times is None):
-        ax.plot(df['x'].groupby(df.index).agg('count').values)
+        ax.plot(df.index.unique(), df['x'].groupby(df.index).agg('count').values)
         set_axis(ax, x = 'iteration', y = 'quantity')
     else:
         ax.plot(times, df['x'].groupby(df.index).agg('count').values)
@@ -96,7 +96,7 @@ def nb_particles_evolution(ax, df, times = None):
 # go back to using basic functions if you want something that fits what you want
 
 def velocity_distribution(df, frames = None, bins = 50, colors = default_colors, density = True, sharex = False, sharey = True):
-    fig, axes = plt.subplots(2,2, sharex = sharex, sharey = sharey, dpi = 300, tight_layout = True)
+    fig, axes = plt.subplots(2,2, sharex = sharex, sharey = sharey, dpi = 200, tight_layout = True)
 
     if(frames is not None):
         df_ = df.loc[np.isin(df.index,frames)]
@@ -115,11 +115,11 @@ def velocity_distribution(df, frames = None, bins = 50, colors = default_colors,
 
     return fig, axes
 
-def spatial_hist2d(df, frames, val, x_res, y_res, x_step = None, y_step = None, bins = 50, color = 'default'):
+def spatial_hist2d(df, frames, val, x_res, y_res, x_step, y_step, bins = 50, color = 'default'):
     if(color == 'default'):
         color = get_color(val)
     
-    fig, axes = plt.subplots(y_res,x_res, sharex = True, sharey = True, dpi = 300, tight_layout = True)
+    fig, axes = plt.subplots(y_res,x_res, sharex = True, sharey = True, dpi = 200, tight_layout = True, squeeze=False)
     if(frames is not None):
         df_ = df.loc[np.isin(df.index,frames)]
     else :
