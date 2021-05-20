@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+# ------------------- System, particles and grid ------------------ #
+
 def plot_system(arr, segments, radius, gs, ss, offset):
     fig, ax = plt.subplots()
     plot_grid(ax, gs, ss, offset)
@@ -51,3 +54,4 @@ def _get_segments(gs, ss, offset):
         segments.append([0, j*dy, lx, j*dy])
 
     return np.array(segments)+np.concatenate((offset, offset), axis = 0)
+
