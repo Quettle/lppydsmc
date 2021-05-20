@@ -6,4 +6,3 @@ from .advector import advect
 from .particle import Particle
 from .grid import Grid, pos_in_grid, convert_to_grid_datatype
 from .collider import candidates, index_choosen_couples, probability, is_colliding, reflect, handler_particles_collisions
-from .notebook import is_notebook
