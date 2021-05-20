@@ -1,4 +1,6 @@
 # perso
+*.VSCodeCounter/
+*.mp4
 results/
 meetings/
 *.h5
