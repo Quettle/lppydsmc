@@ -36,3 +36,7 @@ def mean_free_path(cross_section, density):
 def mean_free_time(mfp, v_mean):
     return mfp/v_mean
     
+# ---------------------- Mass flow rate ------------------------------- #
+
+def compute_mass_flow_rate(qty, delta_time, mass):
+    return qty*mass/delta_time
