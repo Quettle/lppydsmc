@@ -16,7 +16,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     # new_pmax = np.copy(pmax)
     
     if(monitoring):
-        monitor = np.array([0, 0, 0]) # norm, proba, qty
+        monitor = np.array([0, 0]) # norm, proba
 
     for k, (i, j) in enumerate(np.ndindex(currents.shape)): # TODO : parallelize # looping over cells right now
         if(cands[i,j]>0):
@@ -31,7 +31,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             proba = probability(vr_norm = vr_norm, pmax = pmax[i,j], cross_sections = cross_section)
 
             if(monitoring): # summed over all the cells for now
-                monitor = monitor + np.array([np.sum(d), np.sum(proba), proba.shape[0]])
+                monitor = monitor + np.array([np.sum(d), np.sum(proba)])
             
             # TODO : should update pmax here (or return something)...
             max_proba = np.max(proba)
