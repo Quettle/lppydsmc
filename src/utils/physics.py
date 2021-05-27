@@ -40,3 +40,11 @@ def mean_free_time(mfp, v_mean):
 
 def compute_mass_flow_rate(qty, delta_time, mass):
     return qty*mass/delta_time
+
+
+# ---------------------- Speed of sound ------------------------------- #
+
+def speed_of_sound(molecular_mass, temperature, gamma):
+    # all units in SI
+    # sqrt(gamma R T / M)
+    return np.sqrt(8.314*gamma*temperature/molecular_mass)

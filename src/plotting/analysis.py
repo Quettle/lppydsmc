@@ -45,11 +45,11 @@ def set_axis(ax, x = None, y = None, equal = False):
 def SI_unit(val):
     if(val in ['particles','density']):
         return '$m^{-3}$'
-    elif (val in ['v','vx', 'vy', 'vz']):
+    elif (val in ['v','vx', 'vy', 'vz', 'sound speed']):
         return '$m.s^{-1}$'
     elif(val ==  'v2'):
         return '$m^2.s^{-2}$'
-    elif(val in ['x', 'y', 'z','distance']):
+    elif(val in ['x', 'y', 'z','distance', 'mean free path']):
         return '$m$'
     elif(val in ['t', 'time']):
         return 's'
@@ -57,6 +57,8 @@ def SI_unit(val):
         return '#'
     elif(val in ['mass flow rate']):
         return '$kg.s^{-1}$'
+    elif(val in ['temperature', 'T']):
+        return 'K'
     else:
         return ''
     
@@ -131,4 +133,17 @@ def spatial_hist2d(df, frames, val, x_res, y_res, x_step, y_step, bins = 50, col
             # if(j == axes.shape[0]-1):
             #     set_axis(axes[j,i], x = val, y = None)
 
-    return fig, axes
+    return fig, axes    
+
+# ----------------------- No plotting here ---------------------------- #
+def speed_norm(row):
+    return np.sqrt(row['vx']*row['vx']+row['vy']*row['vy']+row['vz']*row['vz'])
+
+# DOES NOT WORK
+# def spatial_speed(df, frames, x_res, y_res, x_step, y_step):
+#     df['mean_speed'] = df.apply(mean_speed, axis = 'columns')
+#     arr = np.zeros((x_res, y_res))
+#     for j in range(x_res):
+#         for i in range(y_res):
+#             arr[i,j] = np.mean(df.loc[(df['y']<(j+1)*y_step) & (df['y']>j*y_step) & (df['x']<(i+1)*x_step) & (df['x']>i*x_step)]['mean_speed'].values[:]
+#     return arr
