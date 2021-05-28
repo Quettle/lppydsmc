@@ -30,8 +30,8 @@ def maxwellian_flux(density, v_mean, drift = 0):
 
 # ---------------------- Mean free path - time ------------------------- #
 
-def mean_free_path(cross_section, density):
-    return 1/(cross_section*density)
+def mean_free_path(cross_section, density): # between two particles of same size
+    return 1/(np.sqrt(2)*cross_section*density)
 
 def mean_free_time(mfp, v_mean):
     return mfp/v_mean
