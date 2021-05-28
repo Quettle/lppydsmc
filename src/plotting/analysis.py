@@ -59,6 +59,8 @@ def SI_unit(val):
         return '$kg.s^{-1}$'
     elif(val in ['temperature', 'T']):
         return 'K'
+    elif(val in ['Mach', 'Rate']):
+        return ''
     else:
         return ''
     
