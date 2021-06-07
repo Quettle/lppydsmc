@@ -73,16 +73,17 @@ def state(ax, df, c, segments = None, data_limit = False):
         ax.set(xlim=(min_x, max_x), ylim=(min_y, max_y))
     set_axis(ax, 'x', 'y', equal = True)
 
-def hist1d(ax, df, val, bins = 10, density = False, color = 'default'):
+    # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.hist.html
+def hist1d(ax, df, val, bins = 10, density = False, color = 'default', weights = None, histtype = 'bar'): # step
     if(color == 'default'):
         color = get_color(val)
 
-    ax.hist(df[val], bins = bins, density = density, color = color)
+    ax.hist(df[val], bins = bins, density = density, color = color, weights = weights, histtype = histtype)
     set_axis(ax, x = val, y = None)
 
 # TODO: add cbar (color bar)
-def hist2d(ax, df, x = 'x', y ='y', stat = 'density', bins = 10, weights = None):
-    sns.histplot(df, x=x, y=y, weights = weights, stat = stat, bins = bins, ax = ax)
+def hist2d(ax, df, x = 'x', y ='y', stat = 'density', bins = 10, weights = None, cbar = True):
+    sns.histplot(df, x=x, y=y, weights = weights, stat = stat, bins = bins, ax = ax, cbar = cbar)
     set_axis(ax, x = x, y = y, equal = True)
 
 def nb_particles_evolution(ax, df, times = None):
