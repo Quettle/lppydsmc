@@ -21,7 +21,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     for k, (i, j) in enumerate(np.ndindex(currents.shape)): # TODO : parallelize # looping over cells right now
         if(cands[i,j]>0):
             choice = index_choosen_couples(currents[i,j], int(cands[i,j]))
-
+    
             g = grid[i,j]
             parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
             array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
