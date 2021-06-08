@@ -18,17 +18,17 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     if(monitoring):
         monitor = np.array([0, 0]) # norm, proba
 
-    for k, (i, j) in enumerate(np.ndindex(currents.shape)): # TODO : parallelize # looping over cells right now
-        if(cands[i,j]>0):
-            choice = index_choosen_couples(currents[i,j], int(cands[i,j]))
+    for idx, k in enumerate(currents): # TODO : parallelize # looping over cells right now
+        if(cands[idx]>0):
+            choice = index_choosen_couples(currents[idx], int(cands[idx]))
     
-            g = grid[i,j]
+            g = grid[idx]
             parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
             array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
 
             vr_norm = np.linalg.norm((array[:,1,2:]-array[:,0,2:]), axis = 1)
             d = np.linalg.norm((array[:,1,:2]-array[:,0,:2]), axis = 1)
-            proba = probability(vr_norm = vr_norm, pmax = pmax[i,j], cross_sections = cross_section)
+            proba = probability(vr_norm = vr_norm, pmax = pmax[idx], cross_sections = cross_section)
 
             if(monitoring): # summed over all the cells for now
                 monitor = monitor + np.array([np.sum(d), np.sum(proba)])
@@ -36,10 +36,10 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             # TODO : should update pmax here (or return something)...
             max_proba = np.max(proba)
             if(max_proba>1):
-                pmax[i,j] = max_proba*pmax[i,j]
+                pmax[idx] = max_proba*pmax[idx]
             
             collidings_couples = is_colliding(proba)
-            collisions[i,j]+=collidings_couples.shape[0]
+            collisions[idx]+=collidings_couples.shape[0]
 
             array[collidings_couples] = reflect(array[collidings_couples], vr_norm[collidings_couples])
 
