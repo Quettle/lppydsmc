@@ -4,7 +4,7 @@ import pandas as pd
 import seaborn as sns
 
 # my imports
-from .matplotlib_utils import plot_boundaries, plot_grid
+from .plt_tools import plot_boundaries, plot_grid
 
 # --------------------------- basic functions ----------------- #
 

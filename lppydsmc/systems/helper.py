@@ -2,7 +2,7 @@
 import numpy as np
 
 # my modules
-from src.system_creator import SystemCreator
+from .creator import SystemCreator
 
 # -------------------- This Module -------------------------- #
 # this module allows an easier use of different default systems 

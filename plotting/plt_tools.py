@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 # ------------------- System, particles and grid ------------------ #
 
 def plot_system(arr, segments, radius, gs, ss, offset):
