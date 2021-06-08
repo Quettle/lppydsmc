@@ -43,7 +43,7 @@ class Container(object):
         """
         self.arr[idx] = self.arr[self.current-1]
         self.current -= 1
-    
+
     def pop(self, idx):
         """Removes the element at index *idx* and returns it.
 
@@ -82,3 +82,6 @@ class Container(object):
     
     def get(self, idx):
         return self.arr[idx]
+
+    def get_max_size(self):
+        return self.size_array
