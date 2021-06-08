@@ -2,7 +2,7 @@ import numpy as np
 
 class Container(object):
     
-    def __init__(self, size_array, number_of_elements = 5, dtype = float):
+    def __init__(self, size_array, number_of_elements, dtype):
         self.size_array = size_array
         if(number_of_elements != 0):
             self.arr = np.empty(shape = (size_array, number_of_elements), dtype = dtype)
