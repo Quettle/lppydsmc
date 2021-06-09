@@ -1,6 +1,6 @@
-# import dolfin
+import dolfin
 import mshr
-# from fenics import * 
+from fenics import * 
 
 import numpy as np
 
