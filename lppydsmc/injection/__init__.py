@@ -1,1 +1,1 @@
-from .injector import inject
+from .injector import maxwellian, dirac
