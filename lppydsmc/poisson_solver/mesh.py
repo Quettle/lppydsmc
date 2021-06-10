@@ -4,7 +4,7 @@ from fenics import *
 
 import numpy as np
 
-def polygonal(resolution, in_vertices, out_vertices = None):
+def polygonal(resolution, in_vertices, out_vertices_list = None):
     """Creates a mesh, of resolution *resolution*, from  *in_vertices* and *out_vertices* and as a polygon. 
 
     Args:
@@ -20,9 +20,10 @@ def polygonal(resolution, in_vertices, out_vertices = None):
     domain = mshr.Polygon(in_vertices) # https://bitbucket.org/fenics-project/mshr/wiki/API/Polygon
                                      # Create polygon defined by the given vertices. Vertices must be in counter-clockwise order and free of self-intersections.
     
-    if(out_vertices is not None):
-        out_vertices = [Point(out_vertices[k,0],out_vertices[k,1]) for k in range(out_vertices.shape[0])]
-        domain -= mshr.Polygon(out_vertices)
+    if(out_vertices_list is not None):
+        for out_vertices in out_vertices_list:
+            out_vertices = [Point(out_vertices[k,0],out_vertices[k,1]) for k in range(out_vertices.shape[0])]
+            domain -= mshr.Polygon(out_vertices)
     
     mesh=mshr.generate_mesh(domain, resolution)
 
