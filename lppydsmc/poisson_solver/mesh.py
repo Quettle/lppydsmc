@@ -39,4 +39,3 @@ def polygonal(resolution, in_vertices, out_vertices = None):
     #     mesh = refine(mesh,marker)
 
     return mesh
-
