@@ -11,6 +11,7 @@ ELECTRON_CHARGE = -1.6e-19 # C
 ELECTRON_EFFECTIVE_DIAMETER = 2.8179403227e-15 # m
 AVOGADRO_CONSTANT = 6.02e23 # mol-1
 GAS_CONSTANT = 8.314 # J.mol-1.K-1
+VACUUM_PERMITTIVITY = 8.8541878128e-12 # F.m-1
 
 # ------------------------ Conversion ------------------- #
 
