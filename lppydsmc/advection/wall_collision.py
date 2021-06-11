@@ -68,7 +68,7 @@ def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, old_count = None): 
     else:
         c2 = count
 
-    if(np.sum(count, where = count == True)==0):
+    if(np.count_nonzero(count)==0): # np.sum(count, where = count == True) (only in python 3.9)
         return c2, idxes_out
     
     cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze(axis=1)
