@@ -14,7 +14,7 @@ def basic(arr, count, law):
     # or we can draw for the whole array of particles which is crearly suboptimal
     idx_reactions = []
     for k, c in enumerate(count):
-        if(c>0):
+        if(c>0):    
             proba_reaction = law(arr[k], c) # TODO we probably have the wall to consider in the future
             rdm_uniform_draw = np.random.random() # we can maybe draw them all out (as we are anyway counting the number of colliding particles outside the function)
             if(proba_reaction < rdm_uniform_draw):
