@@ -61,6 +61,8 @@ def SI_unit(val):
         return 'K'
     elif(val in ['Mach', 'Rate']):
         return ''
+    elif(val in ['angle']):
+        return 'rad'
     else:
         return ''
     
