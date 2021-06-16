@@ -40,7 +40,7 @@ def make_collisions_vectorized(arr, a, ct, cp, old_count = None): # ct : collisi
     arr[count,:] = _reflect_particle(arr[count,:], a_, ct_, cp_)
     return count
 
-def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, old_count = None): # ct : collision time, cp : collision position
+def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, old_count = None, cos_alpha = None): # ct : collision time, cp : collision position
     # basically the same function as make_collisions_vectorized, only we add some conditions
     idxes = np.argmin(ct, axis = 1)
     idxes_out_bool = np.isin(idxes, idx_out_walls) # if the wall for min collision time is in idx_out_walls 
@@ -69,16 +69,23 @@ def make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, old_count = None): 
         c2 = count
 
     if(np.count_nonzero(count)==0): # np.sum(count, where = count == True) (only in python 3.9)
-        return c2, idxes_out
-    
+        if(cos_alpha is None):
+            return c2, idxes_out
+        else :
+            return c2, idxes_out, np.take_along_axis(cos_alpha, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
+
     cp_ = np.take_along_axis(cp, idxes[:,None, None], axis = 1)[count, :].squeeze(axis=1)
     ct_ = np.take_along_axis(ct, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
     a_ = np.take_along_axis(a, idxes[:,None], axis = 0)[count, :]
+    
     arr[c2,:] = _reflect_particle(arr[c2,:], a_, ct_, cp_)
 
-    return c2, idxes_out # the indexes in arr of the particles that got out of the system by out_walls
+    if(cos_alpha is None):
+        return c2, idxes_out # the indexes in arr of the particles that got out of the system by out_walls
+    else:
+        return c2, idxes_out, np.take_along_axis(cos_alpha, idxes[:,None], axis = 1)[count, :].squeeze(axis=1)
 
-pos_end_idx = 2
+# pos_end_idx = 2
 
 # arr is number of particles x (pos_end_idx+3) - we use 3D velocity and 2D pos by default
 # walls is a 2D array consisting wall = np.array([x1, y1, x2, y2]) (for now)
@@ -207,10 +214,14 @@ def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # par
     # a and b
     ctheta, stheta, norm = a[:,0], a[:, 1], a[:, 2] # directing vector of the walls. Normalized !
     p1x, p1y, p2x, p2y = walls[:,0], walls[:,1], walls[:,2], walls[:,3]  #   # np.split(walls, indices_or_sections=4, axis = 1)
-    x, y, vx, vy, vz = np.split(arr, indices_or_sections=5, axis = 1) # arr[:,0],  arr[:,1],  arr[:,2],  arr[:,3],  arr[:,4] # 
+    x, y, vx, vy, vz = np.split(arr, indices_or_sections=5, axis = 1) # arr[:,0],  arr[:,1],  arr[:,2],  arr[:,3],  arr[:,4] #
+
+    speed = np.sqrt(vy*vy+vx*vx)
+
     # split keeps the dimension constant, thus p1x is [number of particles x 1] which allow for the operation later on
     # supposing p2x-p1x > 0
-    b = numexpr.evaluate("vx*stheta-vy*ctheta")  # -velocity.x*stheta+velocity.y*ctheta; stheta = p2y-p1y; ctheta = p2x-p1x
+    b = numexpr.evaluate("vx*stheta-vy*ctheta")  # -velocity.x*stheta+velocity.y*ctheta; stheta = p2y-p1y; ctheta = p2x-p1x 
+    # b = cos(alpha) where alpha is the angle between the velocity and the normal to the wall.
     a_prime = numexpr.evaluate("(p1x-x)*stheta+(y-p1y)*ctheta")
 
     # at this point b is 2D and b[i] returns b for all walls for particle i
@@ -220,17 +231,10 @@ def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # par
     np.divide(-a_prime, b, out=t_intersect, where=b!=0)
 
     t_intersect = np.where(t_intersect>0,t_intersect,np.inf)
-    # ic(t_intersect)
-
+    
     pix = numexpr.evaluate("x-t_intersect*vx")
     piy = numexpr.evaluate("y-t_intersect*vy")
     
-    # ic(pix[0])
-    # ic(piy[0])
-
-    # ic(p1x[0])
-    # ic(ctheta[0])
-    # ic(norm[0])
     # qty = numexpr.evaluate("((radius+(ctheta*(pix-p1x)+stheta*(piy-p1y))))/(norm+2*radius)")  # dP1.inner(dP2)/(norm_1*norm_1) # norm_1 cant be 0 because wall segments are not on same points.
     qty = numexpr.evaluate("(ctheta*(pix-p1x)+stheta*(piy-p1y))/norm")
     
@@ -238,7 +242,7 @@ def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # par
 
     qty = np.where(~np.isnan(qty), qty, -1)
 
-    return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1)
+    return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1), b/
 
 def _reflect_particle(arr, a, ct, cp):
     # be careful, Theta is the opposite of the angle between the wall and the default coord system.
