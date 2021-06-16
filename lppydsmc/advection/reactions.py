@@ -13,11 +13,15 @@ def basic(arr, count, law):
     # however it requires a loop (or a copy)
     # or we can draw for the whole array of particles which is crearly suboptimal
     idx_reactions = []
+    mean_proba = 0
+    s = 0
     for k, c in enumerate(count):
-        if(c>0):    
+        if(c>0):
+            s+= 1
             proba_reaction = law(arr[k], c) # TODO we probably have the wall to consider in the future
+            mean_proba += proba_reaction
             rdm_uniform_draw = np.random.random() # we can maybe draw them all out (as we are anyway counting the number of colliding particles outside the function)
-            if(proba_reaction < rdm_uniform_draw):
+            if(proba_reaction > rdm_uniform_draw):
                 idx_reactions.append(k)
 
-    return np.array(idx_reactions)
+    return np.array(idx_reactions, dtype = int), mean_proba/s

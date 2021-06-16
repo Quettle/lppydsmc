@@ -14,5 +14,5 @@ def background_gas(arr, law): # we need a way to do the reactions with somekind 
 
     rdm_uniform_sample = np.random.random(arr.shape[0])
 
-    return np.where(proba > rdm_uniform_sample)
+    return np.where(proba > rdm_uniform_sample), np.mean(proba)
 
