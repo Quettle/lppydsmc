@@ -37,6 +37,17 @@ def thruster_points(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets
     points = np.array([p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20])
     return points
 
+def thruster_three_grids_points(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets):
+    p2, p3, p28, p1 = rectangle_(l_in, w_in, offset = offsets)
+    p4, p5, p26, p27 = rectangle_(l_1, w_1, offset = offsets+np.array([l_in,0.5*(w_in-w_1)]))
+    p6, p7, p24, p25 = rectangle_(l_int, w_in, offset = offsets+np.array([l_1+l_in, 0]))
+    p8, p9, p22, p23 = rectangle_(l_2, w_2, offset = offsets+np.array([l_in+l_1+l_int,0.5*(w_in-w_2)]))
+    p10, p11, p20, p21 = rectangle_(l_int_2, w_in, offset = offsets+np.array([l_in+l_1+l_int+l_2, 0]))
+    p12, p13, p18, p19 = rectangle_(l_3, w_3, offset = offsets+np.array([l_in+l_1+l_int+l_2+l_int_2,0.5*(w_in-w_3)]))
+    p14, p15, p16, p17 = rectangle_(l_out, w_out, offset = offsets+np.array([l_in+l_1+l_int+l_2+l_int_2+l_3,0.5*(w_in-w_out)]))
+    points = np.array([p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27,p28])
+    return points
+    
 def thruster(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = np.array([0,0])):
     # hypothesis : w_int = w_in
     # returns an array with the walls for the thruster
@@ -44,13 +55,28 @@ def thruster(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = np.a
     points = thruster_points(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets =offsets)
     p1, p20 = points[0], points[-1]
     segments = np.concatenate((points[1:],points[:19]), axis = 1)
-    segments = np.concatenate((segments, np.expand_dims(np.concatenate((p20,p1)),axis = 0)), axis = 0)
+    segments = np.concatenate((segments, np.expand_dims(np.concatenate((p20,p1)), axis = 0)), axis = 0)
     # sorting is realized when the array is created per the SystemCreator. No need to worry at this point.
     return segments # system, idx_out_walls, idx_in_wall
 
+def thruster_three_grids(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets = np.array([0,0])):
+    # hypothesis : w_int = w_in
+    # returns an array with the walls for the thruster
+    # not optimized but we prioritize the clarity here
+    points = thruster_three_grids_points(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets =offsets)
+    p1, p28 = points[0], points[-1]
+    segments = np.concatenate((points[1:],points[:27]), axis = 1)
+    segments = np.concatenate((segments, np.expand_dims(np.concatenate((p28,p1)), axis = 0)), axis = 0)
+    # sorting is realized when the array is created per the SystemCreator. No need to worry at this point.
+    return segments # system, idx_out_walls, idx_in_wall
+
+def thruster_three_grids_system(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets = np.array([0,0])):
+    segments = thruster_three_grids(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets = offsets)
+    return SystemCreator(segments), [0, 13, 14, 15], 0 
+    
 def thruster_system(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = np.array([0,0])):
     segments = thruster(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = offsets)
-    return SystemCreator(segments), [0,10, 9, 11], 0 # system, idx_out_walls, idx_in_wall
+    return SystemCreator(segments), [0, 10, 9, 11], 0 # system, idx_out_walls, idx_in_wall
     # 4 out walls : in wall, + P10-P11 + P11 - P12 + P12 - P13
 
     # --------------------- Cylinder system ----------------- #

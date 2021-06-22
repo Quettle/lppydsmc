@@ -242,9 +242,9 @@ def handler_wall_collision_point(arr, walls, a, deal_with_corner = False): # par
 
     qty = np.where(~np.isnan(qty), qty, -1)
 
-    return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1), b/
+    return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1), b/speed
 
-def _reflect_particle(arr, a, ct, cp):
+def _reflect_particle(arr, a, ct, cp): # _specular
     # be careful, Theta is the opposite of the angle between the wall and the default coord system.
     k1, k2 = 2*a[:,0]**2-1, 2*a[:,0]*a[:, 1] # 2*ctheta**2-1, 2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
 
@@ -258,6 +258,8 @@ def _reflect_particle(arr, a, ct, cp):
 
     return arr
 
+# def _reflect_particle_diffusive(arr, a, ct, cp):
+    
 # very useless
 def deal_with_corner(ct):
     # very inefficient

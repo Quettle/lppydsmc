@@ -20,11 +20,11 @@ charge_density_default = {
             'kwargs' : {}
             }
 
-def thruster(dimensions = dimensions_default, mesh_resolution = 100, potential_electrode_1 = '30', potential_electrode_2 = '300', charge_density = charge_density_default):
+def thruster(dimensions = dimensions_default, mesh_resolution = 100, potential_electrode_1 = '30', potential_electrode_2 = '300', potential_electrode_3 = None, charge_density = charge_density_default):
     
     from .mesh import polygonal
     from .solver import solver
-    from ..systems.helper import thruster_points
+    from ..systems.helper import thruster_points, thruster_three_grids_points
 
     tol = 1e-14
 
@@ -33,15 +33,22 @@ def thruster(dimensions = dimensions_default, mesh_resolution = 100, potential_e
     x_electrode_1 = x_in + dimensions['l_in']
     x_inter_electrodes_area = x_electrode_1 + dimensions['l_1']
     x_electrode_2 = x_inter_electrodes_area + dimensions['l_int']
-    x_out = x_electrode_2 + dimensions['l_2']
+    if(potential_electrode_3 is not None):
+        x_inter_electrodes_area_2 = x_electrode_2 + dimensions['l_2']
+        x_electrode_3 = x_inter_electrodes_area_2 + dimensions['l_int_2']
+        x_out = x_electrode_3 + dimensions['l_3']
 
+    else:
+        x_out = x_electrode_2 + dimensions['l_2']
 
     potential_boundary_conditions = {
         'inflow_area' : '0.0',
         'inflow_area_sides': 'Neumann',
         'electrode_1' : str(potential_electrode_1),
         'inter_electrode_area':'Neumann',
-        'electrode_2': str(potential_electrode_2)
+        'electrode_2': str(potential_electrode_2),
+        'inter_electrode_area_2':'Neumann',
+        'electrode_3': str(potential_electrode_3)
     }
 
     # boundary conditions
@@ -89,8 +96,28 @@ def thruster(dimensions = dimensions_default, mesh_resolution = 100, potential_e
                     }
                 }
 
-    # mesh creation
-    in_vertices = np.flip(thruster_points(**dimensions), axis = 0)
+    if(potential_electrode_3 is not None):
+        boundary_conditions['electrode_3'] ={
+                    'type' : 'Dirichlet',
+                    'solution' : potential_boundary_conditions['electrode_3'], 
+                    'solution_kwargs' : {},
+                    'degree' : 0,
+                    'boundary' : 'on_boundary && x[0] > x_electrode_3 - tol && x[0] < x_out + tol',
+                    'boundary_kwargs' : {
+                        'tol' : tol,
+                        'x_electrode_3' : x_electrode_3,
+                        'x_out' : x_out
+                    }
+                }
+        boundary_conditions['inter_electrode_area_2'] = {
+                    'type' : 'Neumann'
+                }
+        in_vertices = np.flip(thruster_three_grids_points(**dimensions), axis = 0)
+
+    else:
+
+        # mesh creation
+        in_vertices = np.flip(thruster_points(**dimensions), axis = 0)
     mesh = polygonal(resolution = mesh_resolution, in_vertices = in_vertices)
 
     # potential_fields / electric_field
