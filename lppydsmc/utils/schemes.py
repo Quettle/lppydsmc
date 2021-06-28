@@ -7,7 +7,7 @@ import numpy as np
 # The user should be careful to make *f* as efficient as possible (and vectorize it and use only numpy).
 
 def euler_explicit(arr, f, dt, t, args):
-    der = f(arr, t, *args) # acc is 3D [ax, ay, az]
+    der = f(arr, t, *args) # acc is 3D [vx, vy, ax, ay, az]
     arr[:, :] += dt*der
     # arr[:, :2] += arr[:, 2:4]*dt
     return arr
