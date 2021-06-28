@@ -44,6 +44,15 @@ class Container(object):
         self.arr[idx] = self.arr[self.current-1]
         self.current -= 1
 
+    def pop_multiple(self, idxes):
+        idxes.sort() # inplace
+        # forced to loop 
+        tmp = np.copy(self.arr[idxes])
+        for idx in np.flip(idxes): # view = constant time
+            self.arr[idx] = self.arr[self.current-1]
+            self.current -= 1
+        return tmp
+        
     def pop(self, idx):
         """Removes the element at index *idx* and returns it.
 
