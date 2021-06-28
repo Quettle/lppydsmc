@@ -18,6 +18,21 @@ default_colors = {
     'z' : 'b'
 }
 
+def set_fontsizes(SMALL_SIZE = 8, MEDIUM_SIZE = 10, BIGGER_SIZE = 12):
+    # NOTE : figsize in save_fig allows to easily change every sizes in the figure.
+    
+    # SMALL_SIZE = 8
+    # MEDIUM_SIZE = 10
+    # BIGGER_SIZE = 12
+
+    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
 def get_color(val):
     try:
         return default_colors[val]
@@ -63,6 +78,10 @@ def SI_unit(val):
         return ''
     elif(val in ['angle']):
         return 'rad'
+    elif(val in ['potential','V']):
+        return 'V'
+    elif(val in ['electric field','E']):
+        return '$V.m^{-1}$'
     else:
         return ''
     
