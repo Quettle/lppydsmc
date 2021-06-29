@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import numpy as np
+import numpy as np 
 import pandas as pd
 import seaborn as sns
 
@@ -95,11 +95,10 @@ def state(ax, df, c, segments = None, data_limit = False):
     set_axis(ax, 'x', 'y', equal = True)
 
     # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.hist.html
-def hist1d(ax, df, val, bins = 10, density = False, color = 'default', weights = None, histtype = 'bar'): # step
+def hist1d(ax, df, val, bins = 10, density = False, color = 'default', weights = None, histtype = 'bar', label = None): # step
     if(color == 'default'):
         color = get_color(val)
-
-    ax.hist(df[val], bins = bins, density = density, color = color, weights = weights, histtype = histtype)
+    ax.hist(df[val], bins = bins, density = density, color = color, weights = weights, histtype = histtype, label = label)
     set_axis(ax, x = val, y = None)
 
 # TODO: add cbar (color bar)
