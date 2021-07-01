@@ -20,16 +20,17 @@ class Container(object):
         self.current+=o.shape[0]
     
     # we will have the same issue of not being able to use it I think.
-    # @njit # in the long run, we may want to use 
-    def delete_multiple(self, idxes):
+    # @njit # in the long run, we may want to use
+    
+    def delete_multiple(self, idxes, sort = True):
         # best is Numba - however we can not use sort('stable') (idxes is almost sorted)
-        
+
         # Previous version - copying array takes lots of time for very big arrs
         # we could use np.delete() however it changes the size of the return arrays so we have to be more careful
         # self.arr[:self.size_array-idxes.shape[0],:] = np.delete(self.arr, idxes, axis = 0) # operation is not inplace
         # self.current-=idxes.shape[0]
-        
-        idxes.sort() # inplace
+
+        if(sort): idxes.sort() # inplace
         # forced to loop 
         for idx in np.flip(idxes): # view = constant time 
             self.arr[idx] = self.arr[self.current-1]
