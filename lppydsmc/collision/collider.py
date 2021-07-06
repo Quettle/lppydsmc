@@ -100,7 +100,7 @@ def probability(vr_norm, pmax, cross_sections): # still per cell
 
 def is_colliding(proba):
     r = np.random.random(size = proba.shape)
-    return np.where(proba>r, 1,0).astype(bool)
+    return np.where(proba>r)[0] # 1,0).astype(bool)
 
 def reflect(arr, vr_norm):
     
