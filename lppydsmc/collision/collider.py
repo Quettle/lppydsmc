@@ -7,11 +7,12 @@ import numpy as np
 # so I should not DO everything like that but maybe include it in a bigger functions
 # which would be much better
 
-def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_section, volume_cell, mr, remains, monitoring = True):
+def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_sections, volume_cell, particles_weight, remains, monitoring = True):
+    # arr : list of arrays
     # works in place for arr but may take very long ...
     # TODO : may return acceptance rates, and stuff like that...
     collisions = np.zeros(grid.shape)
-    remains, cands = candidates(currents, dt, average, pmax, volume_cell, mr, remains)
+    remains, cands = candidates(currents, dt, average, pmax, volume_cell, particles_weight, remains)
 
     # new_pmax = np.copy(pmax)
     
@@ -26,9 +27,16 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
             array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
 
+            # selecting the right cross_sections
+            if(np.isscalar(cross_sections)):
+                cross_sections_couples = cross_sections
+            else:
+                cross_sections_couples = np.array([cross_sections[c[0,0], c[1,0]] for c in parts])
+            
             vr_norm = np.linalg.norm((array[:,1,2:]-array[:,0,2:]), axis = 1)
             d = np.linalg.norm((array[:,1,:2]-array[:,0,:2]), axis = 1)
-            proba = probability(vr_norm = vr_norm, pmax = pmax[idx], cross_sections = cross_section)
+            
+            proba = probability(vr_norm = vr_norm, pmax = pmax[idx], cross_sections = cross_sections_couples) # TODO : at this point, the cross_section depends on the considered couple - this is the only thing that needs changing
 
             if(monitoring): # summed over all the cells for now
                 monitor = monitor + np.array([np.sum(d), np.sum(proba)])
@@ -54,8 +62,8 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     else:
         return remains, collisions, pmax
 
-def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
-    """ Returns the number of candidates couples to perform dsmc collisions between particles. Note that this formula is for one type of particle only.
+def candidates(currents, dt, average, pmax, volume_cell, particles_weight, remains):
+    """ Returns the number of candidates couples to perform dsmc collisions between particles. (Note that this formula is for one type of particle only => in fact, it is not)
 
     Args:
         currents (ndarray - 2D - float): number of particles per cell
@@ -63,24 +71,25 @@ def candidates(currents, dt, average, pmax, volume_cell, mr, remains):
         average (ndarray - 2D - float): average number of particle in the cell
         pmax (ndarray - 2D - float): max probability per cell ()
         volume_cell (float or ndarray - 2D - float): volume of a cell
-        mr (float): "macro-ratio" - ratio of real particles over macro-particles 
+        particles_weight (float): "macro-ratio" - ratio of real particles over macro-particles 
 
     Returns:
         (ndarray - 2D - float, ndarray - 2D - int) : the number of candidates to select per cell to perform collisions - fractional part first and then int part.
     """
     # for one type of particle for now
-    remains, cands = np.modf(0.5*currents*average*pmax*mr/volume_cell*dt+remains) # (Nc Nc_avg mr (sigma vr)max dt)*/(2V_c)
+    remains, cands = np.modf(0.5*currents*average*pmax*particles_weight/volume_cell*dt+remains) # (Nc Nc_avg particles_weight (sigma vr)max dt)*/(2V_c)
     return remains, cands.astype(int) 
 
 def index_choosen_couples(current, candidates, verbose = False): # per cell - I dont see how we can vectorize it as the number of candidates per cell depends on the cell.
     # in the future, it will be parallized so it should be ok.
     try :
-        return np.random.default_rng().choice(current, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
+        return np.random.randint(low = 0, high = current, size = (candidates,2)) # np.random.default_rng().choice(current, size = (candidates, 2), replace=False, axis = 1, shuffle = False) # we dont need shuffling
     except ValueError as e:
         if(verbose):
             print(e) 
             print(f'{current} < 2 x {candidates} => Some macro-particles will collide several times during the time step.')
-        return np.random.default_rng().choice(current, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
+        return np.random.randint(low = 0, high = current, size = (candidates,2)) # np.random.RandomState.choice(current, size = (candidates, 2), replace = True)
+        # return np.random.default_rng().choice(current, size = (candidates, 2), replace=True, axis = 1, shuffle = False) # we dont need shuffling
 
 def probability(vr_norm, pmax, cross_sections): # still per cell
     # vr_norm should be : np.linalg.norm((arr[choices][:,1,2:]-arr[choices][:,0,2:]), axis = 1)
@@ -91,7 +100,7 @@ def probability(vr_norm, pmax, cross_sections): # still per cell
 
 def is_colliding(proba):
     r = np.random.random(size = proba.shape)
-    return np.where(proba>r, 1,0).astype(bool)
+    return np.where(proba>r)[0] # 1,0).astype(bool)
 
 def reflect(arr, vr_norm):
     
@@ -110,3 +119,4 @@ def reflect(arr, vr_norm):
     arr[:,1,2:] = v_cm - 0.5*v_r_
 
     return arr
+

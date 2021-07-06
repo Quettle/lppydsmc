@@ -38,3 +38,6 @@ class Particle(Container):
 
     def get_params(self):
         return self.params
+
+    def mass(self):
+        return self.params[0]
