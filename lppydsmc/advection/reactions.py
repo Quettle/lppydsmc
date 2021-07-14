@@ -130,13 +130,13 @@ def parse(lines):
             #    # trying to get the st
             if(reactions.__contains__(reacts)):
                 idx_reaction = reactions[reacts]['#'] + 1
-                reactions[reacts.strip()][idx_reaction] = parse_(products)
+                reactions[reacts.strip()][str(idx_reaction)] = parse_(products)
                 reactions[reacts.strip()]['#'] = idx_reaction
             else:
                 reactions[reacts.strip()] = {
                     '#' : 1,
                     'reactants' : parse_(reactants),
-                    1 : parse_(products)
+                    '1' : parse_(products)
                 }
     return reactions
 
