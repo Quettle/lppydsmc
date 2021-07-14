@@ -6,5 +6,11 @@ from . import systems
 from . import injection
 from . import advection
 from . import collision
-# from . import poisson_solver # not started yet.
 
+# from . import poisson_solver # depends on weather we want to split it or not
+
+from . import config
+
+# main files
+from . import run
+from . import main
