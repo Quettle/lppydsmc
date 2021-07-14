@@ -7,9 +7,35 @@ from .creator import SystemCreator
 # -------------------- This Module -------------------------- #
 # this module allows an easier use of different default systems 
 
+def points_to_segments(points):
+    """Convert a list of points, given in clockwise order compared to the inside of the system to a list of segments.
+    The last point being linked to the first one. 
+
+    Args:
+        points (list): list of lists of size 2
+
+    Returns:
+        [np.ndarray]: 2D-array of segments - each row is [x1,y1,x2,y2].
+    """
+    nb_of_points = len(points)
+    points = np.array(points)
+    first, last = points[0], points[-1]
+    segments = np.concatenate((points[1:],points[:nb_of_points-1]), axis = 1)
+    segments = np.concatenate((segments, np.expand_dims(np.concatenate((last,first)), axis = 0)), axis = 0)
+    return segments
     # --------------------- Utils functions -------------------- #
 
 def rectangle_(w,l, offset=np.array([0,0])):
+    """[summary]
+
+    Args:
+        w ([type]): [description]
+        l ([type]): [description]
+        offset ([type], optional): [description]. Defaults to np.array([0,0]).
+
+    Returns:
+        [type]: [description]
+    """
     # top left point is p1 and then its anti-trigo rotation
     p1 = np.array([0,l])+offset
     p2 = np.array([w,l])+offset
