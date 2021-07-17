@@ -41,3 +41,8 @@ class Particle(Container):
 
     def mass(self):
         return self.params[0]
+    
+    def __str__(self) -> str:
+        s = super().__str__()
+        part = 'Particle {} : m = {:.3e} kg - q = {:.3e} C, r = {:.3e} m, cs = {:.3e} m2'.format(self.part_type, self.params[0], self.params[1], self.params[2], self.params[3])
+        return s + ' - ' + part

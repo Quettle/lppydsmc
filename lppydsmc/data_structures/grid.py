@@ -10,11 +10,12 @@ class Grid(object):
 
     def __init__(self, size, max_number_per_cell):
         self.size = size
+        self.max_number_per_cell = max_number_per_cell
         self.arr = np.empty((size), dtype = np.ndarray) # not sure it really works actually
 
         # forced to do that as slicing does not work on arrays of dtype = arrays
         for c in range(self.size):
-                self.arr[c]=np.empty((max_number_per_cell, 2), dtype = int)
+            self.arr[c]=np.empty((max_number_per_cell, 2), dtype = int)
             
         self.current = np.zeros((size), dtype = int)
 
@@ -95,6 +96,8 @@ class Grid(object):
     def get_grid(self):
         return self.arr
 
+    def __str__(self) -> str:
+        return f'Grid - max size : {self.size}x{self.max_number_per_cell} - filled with {np.sum(self.current)} elements.'
 # we now need a hashing function to map from [i,j] (which we get with the pos_in_grid to a only int in [0,res_x*res_y]
 
 def default_hashing(positions, res_y):

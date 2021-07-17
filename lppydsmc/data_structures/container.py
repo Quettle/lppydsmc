@@ -4,6 +4,7 @@ class Container(object):
     
     def __init__(self, size_array, number_of_elements, dtype):
         self.size_array = size_array
+        self.number_of_elements = number_of_elements
         if(number_of_elements != 0):
             self.arr = np.empty(shape = (size_array, number_of_elements), dtype = dtype)
         else :
@@ -95,3 +96,6 @@ class Container(object):
 
     def get_max_size(self):
         return self.size_array
+
+    def __str__(self) -> str:
+        return f'Container filled at {self.number_of_elements} x {self.current}/{self.size_array}'

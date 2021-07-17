@@ -19,7 +19,7 @@ def read(filename):
     config = ConfigObj(filename, configspec=configspec)
 
     # validating it
-    validator = Validator()
+    validator = Validator({'fn': fn_check})
     results = config.validate(validator)
 
     if results != True:
@@ -33,3 +33,14 @@ def read(filename):
                     print ('The following sections were missing: %s ' % ', '.join(section_list))
 
     return config
+
+# -------------- custom check -------------------- #
+
+def fn_check(value):
+    if(value == 'default'):
+        value = '''import numpy as np
+def fn(arr, t, m, q, electric_field):
+    return np.concatenate((arr[:,2:4], np.zeros((arr.shape[0],3))), axis = 1)''' # no acceleration 
+    d = {}
+    exec(value, d)
+    return d['fn']

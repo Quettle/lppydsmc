@@ -26,13 +26,13 @@ def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = Non
 
     particles_to_add = {}
     reacting_particles = []
-    for i,r in enumerate(np.flip(happening_reactions)):
+    for i, r in enumerate(np.flip(happening_reactions)):
         if(r == 0):
             continue
         idxes = idx_reacting_particles[i]
 
         reacting_particles.append(idxes)
-        products = reactions[r]
+        products = reactions[str(r)]
 
         masses_products = np.array([masses[types_dict[product]] for product in products])
         reduced_masses_products = 1/np.sum(masses_products) * masses_products 

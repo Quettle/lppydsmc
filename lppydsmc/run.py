@@ -1,242 +1,322 @@
-from typing import ItemsView
 import lppydsmc as ld
 import numpy as np
+import inspect
+from pathlib import Path
+import pandas as pd
+from tqdm import tqdm
+import os
+import matplotlib.pyplot as plt
 
-def run(path_to_cfg):
+def run(path_to_cfg, save):
     p = ld.config.cfg_reader.read(path_to_cfg) # parameters
 
     setup(p) # modify p in place
 
+    if(save): # savnig the new params to a file so the user can go and debug it or refer to all the simulations params when needed.
+        from configobj import ConfigObj
+        pp_dict = convert_objects(p.dict())
+        pp = ConfigObj(pp_dict)
+        pp.filename = '{}/{}.ini'.format(p['directory'], p['name'])
+        pp.write()
+        
     # TODO :
-    # - add SAVE
     # - add plot functions and params
-    # - add tracking
-    # - etc.
+    # - add monitoring
+    # - add more complexe system (with parts of the system that we dont take) - example of the cylinder.
 
     # maybe some verbose and saving of the params 
-    # simulation now
-    simulate(p)
+
+    # SIMULATION
+    simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], monitoring = None, **p['setup'])
 
     return p
 
+# ----------------- convert ------------------- #
+def convert_objects(p):
+    pp = {}
+    for k, v in p.items():
+        if(type(v) is dict):
+            pp[k] = convert_objects(v)
+        elif(type(v) is list):
+            for i in range(len(v)):
+                v[i] = convert_object(v[i])
+            pp[k] = v
+        else:
+            pp[k] = convert_object(v)
+    return pp
 
+def convert_object(o):
+    try :
+        return '{}{}'.format(o.__name__, inspect.signature(o))
+    except Exception:
+        try :
+            return o.__str__()
+        except Exception:
+            return o
 # ----------------- Simulation functions ---------------------- #
 
+def simulate(use_fluxes, use_dsmc, use_reactions, monitoring, **kwargs):
+    species = kwargs['species'] # dict
+    system = kwargs['system']
+    containers = kwargs['containers'] # dict
+    cross_sections_matrix = kwargs['cross_sections_matrix']
 
-def simulate(p):
-    df = pd.DataFrame(columns = ['x','y','vx','vy','vz','species']) # bucket for the particles - index of particles is the iteration number
-    df_out_particles = pd.DataFrame(columns = ['x','y','vx','vy','vz','species'])
-    nb_colls = np.zeros(grid.current.shape)
-    collisions_with_walls = 0
-    # df_collision_with_walls = pd.DataFrame(columns = ['x','y','type'])
+    # simulation
+    time_step = kwargs['time_step'] # float
+    iterations = kwargs['iterations'] # int
 
-    # adding particle before the simulation - step 0
-    nb_species = params_species['count']
-    containers = params_species['containers']
-    types = params_species['types']
-    types_dict = {}
-    for idx, t in enumerate(types):
-        types_dict[t] = idx
-    arrays = [containers[k].get_array() for k in range(nb_species)]
-    masses = [containers[k].mass() for k in range(nb_species)]
+    # advect
+    update_functions = kwargs['update_functions']
+    args_update_functions = kwargs['args_update_functions']
+    schemes = kwargs['schemes']
+    if(use_fluxes):
+        injected_species = kwargs['inject']['species'] # list is enough here I think
+        in_wall = kwargs['inject']['in_wall']
+        in_vect = kwargs['inject']['in_vect']
+        debits = kwargs['inject']['debits']
+        vel_stds = kwargs['inject']['vel_stds']
+        drifts = kwargs['inject']['drifts']
+        
+        remains = np.zeros((len(injected_species)))
 
-    # No injection
-    # for arr, typ in zip(arrays, types):
-    #   df = df.append(pd.DataFrame(data=np.concatenate((arr, [typ]*arr.shape[0]), axis = 1), index=[0]*arr.shape[0], columns = ['x','y','vx','vy','vz','species']))
+    if(use_dsmc):
+        grid = kwargs['dsmc']['grid']
+        resolutions = kwargs['dsmc']['resolutions']
+        max_proba = kwargs['dsmc']['max_proba']
+        cell_volume = kwargs['dsmc']['cell_volume']
+        particles_weight = kwargs['dsmc']['particles_weight']
 
-    # defining useful arrays and ints 
-        # injection
-    remains = np.zeros((nb_species)) # fractionnal part of the number of particles to inject (it is then passed to the following time step)
-        # grids
-    averages = np.full(shape = grid.current.shape, fill_value = np.sum(mean_numbers_per_cell)) # average number of particles per cell
-    cross_sections = params_species['cross_sections']
-    pmax = 2*np.max(params_species['mean_speeds'])*np.mean(cross_sections)*np.ones(averages.shape) # max proba per cell in the simu
-    remains_per_cell = np.zeros(shape = grid.current.shape, dtype = float) # remains per cell for the particles collisions step
+        # useful values
+        remains_per_cell = np.zeros(shape = grid.current.shape, dtype = float)
+        averages = np.full(shape = grid.current.shape, fill_value = np.sum(kwargs['dsmc']['mean_numbers_per_cell']))
 
-    # SIMULATING
-    print('|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|'.format(' it ', ' INIT ', ' INJECT ', ' DEL ', ' TRY', ' C. WALLS', ' C. PARTS' ))
-    print('{:-^78}'.format(''))
+    if(use_reactions):
+        boundaries_reactions = kwargs['reactions']['boundaries']
+   
 
-    t = 0.0
-    for it in range(1,iterations+1): # tqdm
-        n1 = np.sum([containers[k].get_current() for k in range(nb_species)])
-        
-        # ------------------------- INJECTING PARTICLES -------------------------
-        
-        for k in range(nb_species):
-            new, remains[k] = ld.injection.maxwellian(in_wall, in_vect, debits[k], vel_stds[k], dt, remains[k], drifts[k])
-            containers[k].add_multiple(new)
-            
-        n2 = np.sum([containers[k].get_current() for k in range(nb_species)])
-        
-        # ---------------------------- PHASE : ADVECTING --------------------
-            # MOVING PARTICLES
-        arrays = [containers[k].get_array() for k in range(nb_species)]
-        
-        
-        for k in range(nb_species):
-            ld.advection.advect(arrays[k], update_functions[k], dt, t, args_update_functions[k], schemes[k]) # advect is inplace
-        
-            # HANDLING BOUNDARIES
-        
-        list_counts = []
-        for k in range(nb_species):
-            # initializing local variable
-            arr = arrays[k]
-            container = containers[k]
-            
-            count = np.full(fill_value = True, shape = arr.shape[0])
-            idxes_out = []
-            collided = []
-            c = 0
-            while(np.count_nonzero(count) > 0): # np.sum(count, where = count == True) > 0):
-                c+=1
-                ct, cp, cos_alpha = ld.advection.wall_collision.handler_wall_collision_point(arr[count], segments, a) # handler_wall_collision(arr[count], segments, a, radius)
-                count, idxes_out_, cos_alpha = ld.advection.wall_collision.make_collisions_out_walls(arr, a, ct, cp, idx_out_walls, count, cos_alpha) # idxes_out : indexes of the particles (in arr) that got out of the system
-                idxes_out.append(idxes_out_)
+        # useful 
+    masses = np.array([container.mass() for specie, container in containers.items()])
+    time = 0.
 
-                # the first one that is received is the number of particles colliding with walls.
-                if(c == 1):
-                    collisions_with_walls += np.count_nonzero(count) # np.sum(count, where = count == True)
-                    collided = np.copy(count) # np.where(collided[:collided_current], 1, 0)
-                    
-            if(len(idxes_out)>0):
-                idxes_out = np.sort(np.concatenate(idxes_out))
+    # SIMULATING HERE
+    fig, ax = plt.subplots(constrained_layout = True)
+    for iteration in tqdm(range(iterations)):
+        if(use_fluxes): 
+            inject(injected_species, containers, in_wall, in_vect, debits, vel_stds, time_step, remains, drifts)
+        
+        advect([container.get_array() for specie, container in containers.items()], time, time_step, update_functions, args_update_functions, schemes)
+
+        idxes_gsi = reflect_out_particles(containers, system, iteration, monitoring)
+
+        if(use_reactions):
+            recombine(idxes_gsi, containers, boundaries_reactions, masses, species, monitoring)
+
+        if(use_dsmc):
+            try :
+                dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix, remains_per_cell, monitoring)
+            except Exception:
+                # fig, ax = plt.subplots(constrained_layout = True)
+                ax.clear()
+                plot_system(ax, containers, system)
+                plt.show(fig)
+                raise Exception
+
+        time+=time_step
+
+        if(iteration%1==0):
+            ax.clear()
+            plot_system(ax, containers, system)
+            plt.savefig(f'debugs/{iteration}.png')
+# ---------------- Plotting ---------------- #
+def plot_system(ax, containers, system):
+    for segment in system.get_segments():
+        ax.plot(segment[[0,2]], segment[[1,3]], color = 'k')
+
+    for specie, container in containers.items():
+        arr = container.get_array()
+        ax.scatter(arr[:,0], arr[:,1], label = specie)
+    ax.legend(loc='best')
+
+
+# ------------------- Inject -------------------- #
+def inject(species, containers, in_wall, in_vect, debits, vel_stds, dt, remains, drifts): # in place for remains because numpy array.
+    # some species may not be injected while others will /!\
+    for i, k in enumerate(species): # idx, key (example : 0, 'I')
+        new, remains[i] = ld.injection.maxwellian(in_wall, in_vect, debits[i], vel_stds[i], dt, remains[i], drifts[i])
+        containers[k].add_multiple(new)
+
+# ----------------- Advect ----------------------- #
+def advect(arrays, time, time_step, update_functions, args_update_functions, schemes): # in place
+    for k in range(len(arrays)):
+        ld.advection.advect(arrays[k], update_functions[k], time_step, time, args_update_functions[k], schemes[k]) # advect is inplace 
+
+# --------------- Handle boundaries -------------- #
+
+def reflect_out_particles(containers, system, iteration, monitoring = None): # will also delete particles that got out of the system.
+    a = system.get_dir_vects()
+    segments = system.get_segments()
+    idx_out_segments = system.get_idx_out_segments()
+
+    list_counts = []
+    for k, (specie, container) in enumerate(containers.items()):
+        # initializing local variable
+        arr = container.get_array()
+        container = containers[specie]
+        
+        count = np.full(fill_value = True, shape = arr.shape[0])
+        idxes_out = []
+        collided = []
+        c = 0
+        
+        while(np.count_nonzero(count) > 0): # np.sum(count, where = count == True) > 0):
+            c+=1
+            ct, cp, cos_alpha = ld.advection.wall_collision.handler_wall_collision_point(arr[count], segments, a) # handler_wall_collision(arr[count], segments, a, radius)
+            count, idxes_out_, cos_alpha = ld.advection.wall_collision.make_collisions_out_walls(arr, a, ct, cp, idx_out_segments, count, cos_alpha) # idxes_out : indexes of the particles (in arr) that got out of the system
+            idxes_out.append(idxes_out_)
+
+            # the first one that is received is the number of particles colliding with walls.
+            if(c == 1):
+                if(monitoring is not None):
+                    monitoring['collisions_with_walls'] += np.count_nonzero(count) # np.sum(count, where = count == True)
+                collided = np.copy(count) # np.where(collided[:collided_current], 1, 0)
                 
-                collided_current = collided.shape[0]
-                
-                for idx in np.flip(idxes_out): # view = constant time 
-                    collided[idx] = collided[collided_current-1]
-                    collided_current -= 1
-                    
-                list_counts.append(np.expand_dims(np.where(collided[:collided_current])[0], axis = 1))
-                
-                out_arr = container.pop_multiple(idxes_out)
-                # using k instead of types[k] because this avoids using string in the dataframes which ALWAYS goes bad
-                df_out_particles = df_out_particles.append(pd.DataFrame(data=np.concatenate((out_arr, np.expand_dims([k]*out_arr.shape[0], axis = 1)), axis = 1), index=[it]*out_arr.shape[0], columns = ['x','y','vx','vy','vz','species']))
-            else:
-                list_counts.append(np.array([])) # appending empty list to conserve the correspondance between rank in the global list and species
-        
-
+        if(len(idxes_out)>0):
+            idxes_out = np.sort(np.concatenate(idxes_out))
             
-        particles_to_add = {}
-        for k in range(nb_species):
-            if types[k] in reactions:
-                reacting_particles, particles_to_add_ = ld.advection.reactions.react(np.array(list_counts[k]), arrays = arrays, masses = masses, types_dict = types_dict, reactions = reactions[types[k]], p = None)
-                # reacting_particles should be deleted in arrays[k]
-                # particles_to_add should be added the the asssociated array
-                list_counts[k] = reacting_particles # updating the actually reacting particles
+            collided_current = collided.shape[0]
+            
+            for idx in np.flip(idxes_out): # view = constant time 
+                collided[idx] = collided[collided_current-1]
+                collided_current -= 1
+                
+            list_counts.append(np.expand_dims(np.where(collided[:collided_current])[0], axis = 1))
+            
+            out_arr = container.pop_multiple(idxes_out)
 
-                for key, val in particles_to_add_.items():
-                    if(key in particles_to_add):
-                        particles_to_add[key] += val
-                    else:
-                        particles_to_add[key] = val
-            else:
-                list_counts[k] = np.array([]) 
-        # then and only then we delete everything in the update list_counts
-        # print(f'Total collision with walls: {collisions_with_walls}')
-        # print('DELETE')
-        for k in range(nb_species): # here it's only one particle as it is colliding with the wall
-            # thus it is easier to delete
-            # print('{} - {}'.format(types[k], list_counts[k].shape[0]))
-            containers[k].delete_multiple(list_counts[k])
-            if(types[k] in particles_to_add):
-                # print('ADDING - {} - {}'.format(types[k], len(particles_to_add[types[k]])))
-                containers[k].add_multiple(np.array(particles_to_add[types[k]]))
-        
-        arrays = [containers[k].get_array() for k in range(nb_species)]
-        
-        grid.reset()
-        for k in range(nb_species):
-            arr = arrays[k]
-            new_positions = ld.data_structures.grid.default_hashing(ld.data_structures.grid.pos_in_grid(arr[:,:2], resolutions, offsets, system_shape), res_y = resolutions[1])  
-            parts_in_grid_format = ld.data_structures.grid.convert_to_grid_format(new = new_positions.shape[0], old = 0, container_idx = k)
-            grid.add_multiple(new_positions, parts_in_grid_format)
+            # using k instead of types[k] because this avoids using string in the dataframes which ALWAYS goes bad
+            if(monitoring is not None):
+                monitoring['df_out_particles'] = monitoring['df_out_particles'].append(pd.DataFrame(data=np.concatenate((out_arr, np.expand_dims([k]*out_arr.shape[0], axis = 1)), axis = 1), index=[iteration]*out_arr.shape[0], columns = ['x','y','vx','vy','vz','species']))
+        else:
+            list_counts.append(np.array([])) # appending empty list to conserve the correspondance between rank in the global list and species
+
+    return list_counts # should at some point also return cos_alpha 
+
+def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = None): # catalytic boundary recombination - inplace 
+    particles_to_add = {}
+    arrays = [container.get_array() for specie, container in containers.items()]
+    for k, type_part in enumerate(containers):
+        if type_part in reactions:
+            reacting_particles, particles_to_add_ = ld.advection.reactions.react(np.array(idxes_gsi[k]), arrays = arrays, masses = masses, types_dict = species, reactions = reactions[type_part], p = None)
+            # reacting_particles should be deleted in arrays[k]
+            # particles_to_add should be added the the asssociated array
+            idxes_gsi[k] = reacting_particles # updating the actually reacting particles
+
+            for key, val in particles_to_add_.items():
+                if(key in particles_to_add):
+                    particles_to_add[key] += val
+                else:
+                    particles_to_add[key] = val
+        else:
+            idxes_gsi[k] = np.array([]) 
+    # then and only then we delete everything in the update list_counts
+    # print(f'Total collision with walls: {collisions_with_walls}')
+    # print('DELETE')
+    for k, (type_part, container) in enumerate(containers.items()): # here it's only one particle as it is colliding with the wall
+        # thus it is easier to delete
+        # print('{} - {}'.format(types[k], list_counts[k].shape[0]))
+        container.delete_multiple(idxes_gsi[k])
+        if(type_part in particles_to_add):
+            # print('ADDING - {} - {}'.format(types[k], len(particles_to_add[types[k]])))
+            containers[type_part].add_multiple(np.array(particles_to_add[type_part]))
+
+# --------------- dmsc -------------- #
+
+def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections, remains_per_cell, monitoring = None):
+    arrays = [container.get_array() for specie, container in containers.items()]
     
-        # ----------------------------- PHASE : DSMC COLLISIONS ----------------------------- 
-            # TODO: make parallel (1st : note criticals functions in C++)    
-        currents = grid.get_currents()
-        averages = (it*averages+currents)/(it+1) # TODO: may be it too violent ? 
+    grid.reset()
+    for k in range(len(arrays)):
+        arr = arrays[k]
+        new_positions = ld.data_structures.grid.default_hashing(ld.data_structures.grid.pos_in_grid(arr[:,:2], resolutions, system_offsets, system_shape), res_y = resolutions[1])  
+        parts_in_grid_format = ld.data_structures.grid.convert_to_grid_format(new = new_positions.shape[0], old = 0, container_idx = k)
+        grid.add_multiple(new_positions, parts_in_grid_format)
+ 
+    # ----------------------------- PHASE : DSMC COLLISIONS ----------------------------- 
+        # TODO: make parallel (1st : note criticals functions in C++)    
+    currents = grid.get_currents()
+    averages = (iteration*averages+currents)/(iteration+1) # TODO: may be it too violent ? 
 
-        remains_per_cell, nb_colls_, pmax, monitor = ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, dt, averages, pmax, cross_sections, volume_cell, params_species['particles_weight'], remains_per_cell, monitoring = True)
-        nb_colls += nb_colls_
-        t += dt
+    if(monitoring is not None):
+        remains_per_cell, nb_colls_, pmax, monitor = ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, time_step, \
+            averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, monitoring = True)
 
-        # ----------------------------- PLOTTING AND SAVING (OPTIONAL) ----------------------------- 
-        if(it%adding_period == 0 or it == iterations):
-            # print('Mean speed : ' + ' - '.join([str(np.mean(np.linalg.norm(arrays[k][:,2:], axis = 1))) for k in range(nb_species)]) + '\t m/s')
-            for k, arr in enumerate(arrays):
-                df = df.append(pd.DataFrame(data=np.concatenate((arr, np.expand_dims([k]*arr.shape[0], axis = 1)), axis = 1), index=[it]*arr.shape[0], columns = ['x','y','vx','vy','vz','species']))
-                
-        if(it%saving_period == 0 or it == iterations): # saving if last iteration too
+        monitoring['nb_colls'] += nb_colls_
+        monitoring['pmax'] = pmax
+        monitoring['monitor'] = monitor
 
-            saver.save(it = it, append = {
-                            'df' : df,
-                            'collisions_per_cell' : nb_colls, # evolution of the number of collisions per cell - size : grid.shape[0] x grid.shape[1] (2D)
-                            'total_distance' : float(monitor[0]), # evolution of the sum of the distance accross all cells 
-                            'total_proba' : float(monitor[1]), # evolution of the sum of proba accross all cells
-                            'pmax_per_cell' : pmax,  # evolution of the sum of pmax - per cell (2D)
-                            'total_deleted' : len(idxes_out), # evolution of the number of deleted particles per cell (int)
-                            'averages_per_cell' : averages, # evolution of the average number of particle per cell
-                            'collisions_with_walls' : collisions_with_walls, # number of collisions with walls - evolution
-                            'df_out_particles' : df_out_particles
-                    })
-
-            print('|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|'.format(it, n1, n2-n1, idxes_out.shape[0], c, collisions_with_walls, int(np.sum(nb_colls))))
-            
-            # resetting dataframe to not use too much memory
-            collisions_with_walls = 0
-            nb_colls = np.zeros(grid.current.shape)
-            df = pd.DataFrame(columns = ['x','y','vx','vy','vz','species'])
-            df_out_particles = pd.DataFrame(columns = ['x','y','vx','vy','vz','species'])
-            
-    saver.close()
-
-
-
+    else : 
+        remains_per_cell = ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, time_step, \
+            averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, monitoring = False)
 
 # ------------------- Processing params ------------------- #
 
 def setup(p):
-    p['setup'] = {} # initialize a container that is going to contain the objects required for the setup phase.
+    p['directory'] = Path(p['directory']).resolve()
 
     # converting points to segments (which are then sent to the system creator)
     points = [v for k, v in p['system']['points'].items()]
-    p['system']['segments'] = ld.systems.helper.points_to_segments(points)
 
-    p['setup']['system'] = ld.systems.creator.SystemCreator(p['system']['segments'])
-    
-    p['system']['offsets'] = p['setup']['system'].get_offsets()
-    p['system']['system_shape'] = p['setup']['system'].system_shape()
-    p['system']['a'] = p['setup']['system'].get_dir_vects()
+    p['system']['segments'] = ld.systems.helper.points_to_segments(points)
+    system = ld.systems.creator.SystemCreator(p['system']['segments'], p['system']['out_boundaries']['out_boundaries'])
+    p['system']['offsets'] = system.get_offsets()
+    p['system']['system_shape'] = system.get_shape()
+    p['system']['a'] = system.get_dir_vects()
 
     # species
     species = p['species']
     species['int_to_key'] = {str(i) : k for i, k in enumerate(p['species']['list'])} # attribute an integer to each species
     species['key_to_int'] = {v : int(k) for k, v in species['int_to_key'].items()}
     species['names'] = [k for k in species['key_to_int']]
+    params_species = convert(p['species']['list'])
 
+    volume = ld.utils.estimation.estimate_surface(samples = int(1e4), points = points)[0]
+    safety_factor = 2
+    size_arrays = safety_factor * params_species['densities'] * volume * p['system']['dz'] # volume is approximated using a Monte Carlo method.
     
-    # params['cross_sections'] = cross_sections(radii, params['mean_speeds']) # np.array([params['containers'][k].get_params()[3] for k in range(params['count'])])
-    # params['mean_free_paths'] = ld.utils.physics.mean_free_path(params['cross_sections'], np.sum(densities)) # taking the sum of all densities
-    # params['mean_free_times'] = ld.utils.physics.mean_free_time(params['mean_free_paths'], v_mean = params['mean_speeds'])
-    
+    cross_sections_matrix = get_cross_sections(params_species['radii']) # hard sphere model
+
+    # TODO : intializing mean speeds is required too, since it will be changed if we need to load something but in a first approximation we need something
+    # however we dont know... May be we can ask the user ? 
+    # What should we do if there is no injection ? 
+    # For now, I think it's safe to say that if use_fluxes != True, then since there is no 'init particles in system' available now, we should simply return an error message
+    if(not p['use_fluxes']):
+        print('You either need particles in the system (UNAVAILABLE) or have an injection to launch a simulation. Here *use_fluxes* is {}'.format(p['use_fluxes']))
+        raise ValueError
 
     if(p['use_dsmc']):
         dsmc = p['dsmc']
         dsmc['grid']['resolutions'] = np.array(dsmc['grid']['resolutions'])
-        dsmc['mnpc'] = np.array([v['mean_number_per_cell'] for k, v in dsmc['mean_number_per_cell'].items()])
+        dsmc['mean_numbers_per_cell'] = np.array([v['mean_number_per_cell'] for k, v in dsmc['mean_number_per_cell'].items()])
         max_size = dsmc['grid']['max_size']
 
-        # creating grid
+        # creating grid 
         dsmc['cells_number'] = np.prod(dsmc['grid']['resolutions'])
         dsmc['cell_volume'] = p['system']['dz'] * np.prod(p['system']['system_shape'])/dsmc['cells_number']
 
-        # setup useful objects
-        p['setup']['grid'] = ld.data_structures.Grid(dsmc['cells_number'], max_size)
-        p['setup']['dsmc_params'], p['setup']['containers'] = species_setup(p['species']['list'], init_number_per_cells = dsmc['mnpc'], number_of_cells = dsmc['cells_number'], cell_volume = dsmc['cell_volume'])
+        dsmc['total_number_particles_simu'] = dsmc['mean_numbers_per_cell'] * dsmc['cells_number']
+        dsmc['total_number_particles_real'] = dsmc['cell_volume'] * params_species['densities'] * dsmc['cells_number'] 
+        dsmc['particles_weight'] = dsmc['total_number_particles_real']/dsmc['total_number_particles_simu']
+        dsmc['particles_weight'] = dsmc['particles_weight'].astype(int)
+        w0 = dsmc['particles_weight'][0]
+        for w in dsmc['particles_weight']:
+            assert(w0==w)
+        dsmc['particles_weight'] = w0
+        dsmc['densities_dsmc'] = params_species['densities']/dsmc['particles_weight']
 
+        # adapting the size of the arrays for when creating all the containers
+        size_arrays = size_arrays/dsmc['particles_weight'] 
+        size_arrays = size_arrays.astype(int)
+        
     if(p['use_fluxes']):
         fluxes = p['fluxes']
         pi1, pi2 = fluxes['pi1'], fluxes['pi2']
@@ -245,8 +325,9 @@ def setup(p):
         fluxes['in_vect'] = fluxes['in_vect']/np.linalg.norm(fluxes['in_vect'])
 
         fluxes['names'] = [k for k in fluxes['species']]
+        
         if(p['use_dsmc']):
-            densities_dsmc = p['setup']['dsmc_params']['densities_dsmc']
+            densities_dsmc = dsmc['densities_dsmc']
             densities = np.array([densities_dsmc[species['key_to_int'][k]] for k in fluxes['names']])
         else:
             densities = np.array([species[k]['density'] for k in fluxes['names']])
@@ -259,22 +340,100 @@ def setup(p):
         fluxes['debits'] = ld.utils.physics.maxwellian_flux(densities, mean_speeds)*np.linalg.norm(fluxes['in_wall'][:2]-fluxes['in_wall'][2:])*p['system']['dz']
         fluxes['vel_stds'] = ld.utils.physics.gaussian(temperatures, masses)
         fluxes['drifts'] = drifts
-    
+
     if(p['use_reactions']):
-        p['setup']['reactions'] = {}
-        print(p['reactions']['walls'])
-        reactions = ld.advection.reactions.parse(p['reactions']['walls'])
-        
-        p['setup']['reactions']['walls'] = ld.advection.reactions.parse(p['reactions']['walls'])
+        pass
 
     if(p['use_poisson']):
         import lppydsmc.poisson_solver as ps
         poisson = p['system']['poisson_solver']
+
+    # /!\ Setting the parameters used in the simulation.
+    p['setup'] = {}
+    p['setup']['system'] = system
+    p['setup']['species'] = species['key_to_int']
+    p['setup']['cross_sections_matrix'] = cross_sections_matrix
+        # simulation
+    p['setup']['time_step'] = p['simulation']['time_step'] # float
+    p['setup']['iterations'] = p['simulation']['iterations'] # int
+        # containers
+    types = params_species['types']
+    charges = params_species['charges']
+    masses = params_species['masses']
+    radii = params_species['radii']
+    p['setup']['containers'] = {types[k] : ld.data_structures.Particle(types[k], charges[k], masses[k], radii[k], size_arrays[k]) for k in range(params_species['count'])}
+        # dsmc
+    if(p['use_dsmc']):
+        p['setup']['dsmc'] = {}
+        p['setup']['dsmc']['grid'] = ld.data_structures.Grid(dsmc['cells_number'], max_size)
+        p['setup']['dsmc']['resolutions'] = dsmc['grid']['resolutions']
+        # TODO : the setup of mean_speeds should be much better than that. And also, this should be max(sigma*c_r), not max(sigma)max(c_r)
+        # we can not multiply those two as mean_speeds can be of a lesser dimension than sigma
+        p['setup']['dsmc']['max_proba'] = 2*np.max(mean_speeds)*np.max(p['setup']['cross_sections_matrix'])*np.ones(p['setup']['dsmc']['grid'].current.shape)
+        p['setup']['dsmc']['cell_volume'] = dsmc['cell_volume']
+        p['setup']['dsmc']['particles_weight'] = dsmc['particles_weight']
+        p['setup']['dsmc']['mean_numbers_per_cell'] = dsmc['mean_numbers_per_cell']
+            # fluxes
+    if(p['use_fluxes']):
+        p['setup']['inject'] = {}
+        p['setup']['inject']['species'] = fluxes['names']
+        p['setup']['inject']['in_wall'] = fluxes['in_wall']
+        p['setup']['inject']['in_vect'] = fluxes['in_vect']
+        p['setup']['inject']['debits'] = fluxes['debits']
+        p['setup']['inject']['vel_stds'] = fluxes['vel_stds']
+        p['setup']['inject']['drifts'] = fluxes['drifts']
+        # reactions
+    if(p['use_reactions']):
+        p['setup']['reactions'] = {}        
+        p['setup']['reactions']['boundaries'] = ld.advection.reactions.parse(p['reactions']['boundaries'])
+        # poisson
+    if(p['use_poisson']):
         p['setup']['mesh'] = ps.mesh.polygonal(poisson['mesh_resolution'],  np.flip(np.array(points), axis = 0), out_vertices_list = None) # polygonal recieves points in counter-clock order
         p['setup']['potential_field'], p['setup']['electric_field'] = ps.solver(p['setup']['mesh'], poisson['boundary_conditions'], poisson['charge_density'])
 
+        # integration
+    if(p['use_poisson']):
+        p['setup']['schemes'], p['setup']['update_functions'], p['setup']['args_update_functions'] = \
+            integration_setup(p['simulation']['integration'], p['setup']['species'], masses, charges, p['setup']['electric_field'], p['setup']['potential_field'])
+    else :
+        p['setup']['schemes'], p['setup']['update_functions'], p['setup']['args_update_functions'] = \
+            integration_setup(p['simulation']['integration'], p['setup']['species'], masses, charges)
+
+    # since it is a inplace function, we dont need to return anything.
+
 # ------------------ utils -------------------------- #
 
+def integration_setup(integration_params, species_to_int, masses, charges, electric_field = None, potential_field = None):
+    nb_species = len(species_to_int)
+    default_scheme, default_fn, default_args = None, None, None
+    if('default' in integration_params):
+        default_scheme = ld.utils.schemes.scheme_dispatcher(integration_params['default']['scheme'])
+        default_fn = integration_params['default']['fn']
+        default_args = integration_params['default']['users_args']
+    schemes = [default_scheme]*nb_species
+    fn = [default_fn]*nb_species
+    args = [dict(default_args) for k in range(nb_species)]
+
+    for key, val in integration_params.items():
+        if(key == 'default'):
+            continue
+        idx = species_to_int[key]
+
+        schemes[idx] = ld.utils.schemes.scheme_dispatcher(val['scheme'])
+        fn[idx] = val['fn']
+        args[idx] = val['users_args']
+
+    for k in range(len(args)):
+        args[k]['mass'] = masses[k]
+        args[k]['charge'] = charges[k]
+
+        for k in range(nb_species):
+            args[k]['electric_field'] = None 
+            if(electric_field is not None and potential_field is not None):
+                args[k]['electric_field'] = electric_field
+            # args[k]['potential_field'] = potential_field
+
+    return schemes, fn, args
 # useless
 def init_max_proba(radii, mean_speeds, grid_shape):
     # radii and v_mean are of size Ns(number of species)
@@ -293,7 +452,7 @@ def init_max_proba(radii, mean_speeds, grid_shape):
                 pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?
     return pmax, cross_sections
 
-def cross_sections(radii, mean_speeds):
+def get_cross_sections(radii):
     # radii and v_mean are of size Ns(number of species)
     # grid_shape is of size Nc (the number of cells)
     shape_out = [radii.shape[0], radii.shape[0]]
@@ -338,28 +497,3 @@ def convert(species):
     dico['count'] = len(types)
     
     return dico
-
-def species_setup(species, init_number_per_cells, number_of_cells, cell_volume):
-    params = convert(species)
-    
-    types = params['types']
-    densities = params['densities']
-    charges = params['charges']
-    masses = params['masses']
-    radii = params['radii']
-    
-    # computed quantities
-    size_arrays = init_number_per_cells*number_of_cells # max size for the array
-    containers = [ld.data_structures.Particle(types[k], charges[k], masses[k], radii[k], size_arrays[k]) for k in range(params['count'])]
-    
-    params['total_number_particles_simu'] = init_number_per_cells * number_of_cells
-    params['total_number_particles_real'] = cell_volume * densities * number_of_cells 
-    params['particles_weight'] = params['total_number_particles_real']/params['total_number_particles_simu']
-    params['particles_weight'] = params['particles_weight'].astype(int)
-    w0 = params['particles_weight'][0]
-    for w in params['particles_weight']:
-        assert(w0==w)
-    params['particles_weight'] = w0
-    params['densities_dsmc'] = densities/params['particles_weight']
-
-    return params, containers

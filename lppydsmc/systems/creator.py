@@ -6,7 +6,7 @@ class SystemCreator(object):
     Example : 
         Boundary : type = ndarray ; value = [x1,y1,x2,y2]
     """
-    def __init__(self, segments):
+    def __init__(self, segments, idx_out_segments):
         """ Initialize a system from a list of segments (2D-ndarray).
 
         Args:
@@ -14,7 +14,8 @@ class SystemCreator(object):
         """
         self.segments, self.a = self._init_segments(segments)
         self.min_x, self.max_x, self.min_y, self.max_y = self._init_extremal_values()
-
+        self.idx_out_segments = idx_out_segments
+        
     def _init_segments(self, segments):
         segments_ = []
         a = np.zeros((segments.shape[0], 3))
@@ -46,7 +47,7 @@ class SystemCreator(object):
 
     # -------------------------- Getter / Setter --------------- #
 
-    def system_shape(self):
+    def get_shape(self):
         return np.array([self.max_x - self.min_x, self.max_y - self.min_y])
 
     def get_extremal_values(self):
@@ -67,4 +68,8 @@ class SystemCreator(object):
     def get_dir_vects(self):
         return self.a
 
+    def get_idx_out_segments(self):
+        return self.idx_out_segments
     
+    def __str__(self) -> str:
+        return f'System : shape = {self.get_shape()} m - offsets = {self.get_offsets()} - {len(self.segments)} segments of which {len(self.idx_out_segments)} are exits'
