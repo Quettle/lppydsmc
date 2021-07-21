@@ -1,5 +1,5 @@
 from . import advector
-from . import wall_collision
+from . import boundaries
 from . import reactions
 
 from .advector import advect

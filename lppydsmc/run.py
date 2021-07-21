@@ -8,6 +8,7 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 from pprint import pprint
+
 def run(path_to_cfg, save):
     p = ld.config.cfg_reader.read(path_to_cfg) # parameters
 
@@ -33,9 +34,8 @@ def run(path_to_cfg, save):
 
     # TODO :
     # - add plot functions and params
-    # - add monitoring
     # - add more complexe system (with parts of the system that we dont take) - example of the cylinder.
-    # maybe some verbose and saving of the params 
+    # - maybe some verbose and saving of the params 
     
     # SIMULATION
     if(p['use_monitoring']): # TODO : may be this should be done in the setup phase
@@ -95,9 +95,11 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
     containers = kwargs['containers'] # dict
     cross_sections_matrix = kwargs['cross_sections_matrix']
     path = kwargs['path']
+    reflect_fns = kwargs['reflect_fns']
     # simulation
     time_step = kwargs['time_step'] # float
     iterations = kwargs['iterations'] # int
+    masses = np.array([container.mass() for specie, container in containers.items()])
 
     # advect
     update_functions = kwargs['update_functions']
@@ -120,6 +122,11 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
         max_proba = kwargs['dsmc']['max_proba']
         cell_volume = kwargs['dsmc']['cell_volume']
         particles_weight = kwargs['dsmc']['particles_weight']
+        use_same_mass = kwargs['dsmc']['use_same_mass']
+        if(use_same_mass):
+            dsmc_masses = None
+        else:
+            dsmc_masses = masses
 
         # useful values
         remains_per_cell = np.zeros(shape = grid.current.shape, dtype = float)
@@ -132,7 +139,6 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
         # useful
     
     
-    masses = np.array([container.mass() for specie, container in containers.items()])
     time = 0.   
 
     # Monitoring    
@@ -172,7 +178,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
 
         advect([container.get_array() for specie, container in containers.items()], time, time_step, update_functions, args_update_functions, schemes)
 
-        results_reflect_particles = reflect_out_particles(containers, system, monitoring) 
+        results_reflect_particles = reflect_out_particles(containers, system, reflect_fns, monitoring) 
         # if monitoring is True then return idx_gsi and out_particles (the particles that got out)
         
         if(monitoring):
@@ -221,7 +227,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
             # try :
             results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
                 averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
-                    remains_per_cell, monitoring, group_fn) # results_dsmc = None if monitoring == False
+                    remains_per_cell, dsmc_masses, monitoring, group_fn) # results_dsmc = None if monitoring == False
             # except Exception as e:
             #     ax.clear()
             #     plot_system(ax, containers, system)
@@ -309,7 +315,7 @@ def advect(arrays, time, time_step, update_functions, args_update_functions, sch
 
 # --------------- Handle boundaries -------------- #
 
-def reflect_out_particles(containers, system, monitoring = None): # will also delete particles that got out of the system.
+def reflect_out_particles(containers, system, reflect_fns, monitoring = None): # will also delete particles that got out of the system.
     a = system.get_dir_vects()
     segments = system.get_segments()
     idx_out_segments = system.get_idx_out_segments()
@@ -328,8 +334,10 @@ def reflect_out_particles(containers, system, monitoring = None): # will also de
         
         while(np.count_nonzero(count) > 0): # np.sum(count, where = count == True) > 0):
             c+=1
-            ct, cp, cos_alpha = ld.advection.wall_collision.handler_wall_collision_point(arr[count], segments, a) # handler_wall_collision(arr[count], segments, a, radius)
-            count, idxes_out_, cos_alpha = ld.advection.wall_collision.make_collisions_out_walls(arr, a, ct, cp, idx_out_segments, count, cos_alpha) # idxes_out : indexes of the particles (in arr) that got out of the system
+            ct, cp = ld.advection.boundaries.get_possible_collisions(arr[count], segments, a)
+            colliding_particles, idxes_out_, idxes_walls = ld.advection.boundaries.get_indexes(ct, idx_out_segments, old_colliding_particles = count)
+            ld.advection.boundaries.reflect_back_in(arr, colliding_particles, idxes_walls, a, ct, cp, reflect_fns[k]) # in place
+            
             idxes_out.append(idxes_out_)
 
             # the first one that is received is the number of particles colliding with walls.
@@ -403,7 +411,7 @@ def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = Fa
 # --------------- dmsc -------------- #
 
 def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, iteration, time_step, \
-    max_proba, cell_volume, particles_weight, cross_sections, remains_per_cell, monitoring = False, group_fn = None):
+    max_proba, cell_volume, particles_weight, cross_sections, remains_per_cell, masses = None, monitoring = False, group_fn = None):
     arrays = [container.get_array() for specie, container in containers.items()]
     
     grid.reset()
@@ -421,7 +429,7 @@ def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, 
     averages = (iteration*averages+currents)/(iteration+1) # TODO: may be it too violent ? 
 
     return ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, time_step, \
-            averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, monitoring = monitoring, group_fn = group_fn) # inplace for remains_per_cell
+            averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, masses, monitoring = monitoring, group_fn = group_fn) # inplace for remains_per_cell
     # None if monitoring = False, else results = remains_per_cell, nb_colls_, pmax, monitor 
 
 # ------------------- Processing params ------------------- #
@@ -520,6 +528,8 @@ def setup(p):
     p['setup']['species'] = species['key_to_int']
     p['setup']['cross_sections_matrix'] = cross_sections_matrix
     p['setup']['path'] = p['directory']/p['name']
+        # reflection on boundaries - reflect_fns
+    p['setup']['reflect_fns'] = reflection_functions_setup(p['system']['reflect_fns'], p['setup']['species'])
         # simulation
     p['setup']['time_step'] = p['simulation']['time_step'] # float
     p['setup']['iterations'] = p['simulation']['iterations'] # int
@@ -534,6 +544,7 @@ def setup(p):
         p['setup']['dsmc'] = {}
         p['setup']['dsmc']['grid'] = ld.data_structures.Grid(dsmc['cells_number'], max_size)
         p['setup']['dsmc']['resolutions'] = dsmc['grid']['resolutions']
+        p['setup']['dsmc']['use_same_mass']  = dsmc['use_same_mass']
         # TODO : the setup of mean_speeds should be much better than that. And also, this should be max(sigma*c_r), not max(sigma)max(c_r)
         # we can not multiply those two as mean_speeds can be of a lesser dimension than sigma
         p['setup']['dsmc']['max_proba'] = 2*np.max(mean_speeds)*np.max(p['setup']['cross_sections_matrix'])*np.ones(p['setup']['dsmc']['grid'].current.shape)
@@ -601,23 +612,41 @@ def integration_setup(integration_params, species_to_int, masses, charges, elect
             # args[k]['potential_field'] = potential_field
 
     return schemes, fn, args
-# useless
-def init_max_proba(radii, mean_speeds, grid_shape):
-    # radii and v_mean are of size Ns(number of species)
-    # grid_shape is of size Nc (the number of cells)
-    shape_pmax = [radii.shape[0], radii.shape[0]] + list(grid_shape)
-    pmax = np.ones(tuple(shape_pmax), dtype = float)
-    cross_sections = np.ones(tuple(shape_pmax), dtype = float)
 
-    for i in range(pmax.shape[0]):
-        for j in range(i+1):
-            if(i==j):
-                cross_sections[i,j] = np.pi * 4*radii[i]**2
-                pmax[i,j] *= 2*mean_speeds[i] * np.pi * 4*radii[i]**2  # we'll take the max proba straight away ?
-            else:
-                cross_sections[i,j] = np.pi * (radii[i]+radii[1])**2 
-                pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?
-    return pmax, cross_sections
+def reflection_functions_setup(reflection_params, species_to_int):
+    nb_species = len(species_to_int)
+    default_reflect_fn = None, None, None
+    if('default' in reflection_params):
+        default_reflect_fn = ld.advection.boundaries.reflection_functions_dispatcher(reflection_params['default']['reflect_fn'])
+
+    reflect_fns = [default_reflect_fn]*nb_species
+    
+    for key, val in reflection_params.items():
+        if(key == 'default'):
+            continue
+        idx = species_to_int[key]
+
+        reflect_fns[idx] = val['reflect_fn']
+
+    return reflect_fns
+
+# useless
+# def init_max_proba(radii, mean_speeds, grid_shape):
+#     # radii and v_mean are of size Ns(number of species)
+#     # grid_shape is of size Nc (the number of cells)
+#     shape_pmax = [radii.shape[0], radii.shape[0]] + list(grid_shape)
+#     pmax = np.ones(tuple(shape_pmax), dtype = float)
+#     cross_sections = np.ones(tuple(shape_pmax), dtype = float)
+
+#     for i in range(pmax.shape[0]):
+#         for j in range(i+1):
+#             if(i==j):
+#                 cross_sections[i,j] = np.pi * 4*radii[i]**2
+#                 pmax[i,j] *= 2*mean_speeds[i] * np.pi * 4*radii[i]**2  # we'll take the max proba straight away ?
+#             else:
+#                 cross_sections[i,j] = np.pi * (radii[i]+radii[1])**2 
+#                 pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?
+#     return pmax, cross_sections
 
 def get_cross_sections(radii):
     # radii and v_mean are of size Ns(number of species)

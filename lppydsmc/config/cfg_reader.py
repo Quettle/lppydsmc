@@ -19,7 +19,7 @@ def read(filename):
     config = ConfigObj(filename, configspec=configspec)
 
     # validating it
-    validator = Validator({'fn': fn_check})
+    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check})
     results = config.validate(validator)
 
     if results != True:
@@ -31,11 +31,14 @@ def read(filename):
                     print ('The following section was missing: %s ' % ', '.join(section_list))
                 else:
                     print ('The following sections were missing: %s ' % ', '.join(section_list))
-
     return config
 
 # -------------- custom check -------------------- #
 
+# TODO : the default value should not be given there
+# maybe we return 'default'
+# and then we add a dispatcher in the setup phase that simply returns the functions clearly well defined in the integration functions
+# also rename it to integration_fn_check
 def fn_check(value):
     if(value == 'default'):
         value = '''import numpy as np
@@ -44,3 +47,10 @@ def fn(arr, t, m, q, electric_field):
     d = {}
     exec(value, d)
     return d['fn']
+
+def reflect_fn_check(value):
+    if(value in ['specular','diffusive']):
+        return value
+    d = {}
+    exec(value, d)
+    return d['reflect_fn']

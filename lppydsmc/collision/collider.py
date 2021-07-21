@@ -7,7 +7,10 @@ import numpy as np
 # so I should not DO everything like that but maybe include it in a bigger functions
 # which would be much better
 
-def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_sections, volume_cell, particles_weight, remains, monitoring = False, group_fn = None):
+# TODO : Split this method into several smaller ones (just to get a sense of the performance analysis)
+# it's clear that this is the tricker algorithm there is in terme of performance, and the limiting one too
+# however, it may not be necessary to optimize everything in this method
+def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_sections, volume_cell, particles_weight, remains, species_mass = None, monitoring = False, group_fn = None):
     # group_fn should not be None if monitoring is True
     # arr : list of arrays
     # works in place for arr but may take very long ...
@@ -16,7 +19,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
     nb_cells = grid.shape[0]
     nb_species = len(arr)
     # new_pmax = np.copy(pmax)
-    
+    masses = None
     if(monitoring):
         # setting collisions
         nb_groups = (nb_species*(nb_species+1))//2
@@ -55,29 +58,38 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             if(max_proba>1):
                 pmax[idx] = max_proba*pmax[idx]
             
-            collidings_couples = is_colliding(proba) # indexes in array of the ACTUALLY colliding couples
+            colliding_couples = is_colliding(proba) # indexes in array of the ACTUALLY colliding couples
+
+            colliding_array = array[colliding_couples]
 
             if(monitoring):
-                if(collidings_couples.shape[0]>0):
-                    colliding_parts = array[collidings_couples]
+                if(colliding_couples.shape[0]>0):
                     # a 2D-array with [[[c1,i1],[c2,i2]], [[c3,i3],[c4,i4]], ...] ; c for container index, i for index in container 
                     # ideally, we would like to do a groupby on container indexes and then count the number 
                     # this is the use of group_fn, defined as a lambda function of 'arr' using first *set_groups* then *get_groups*
                     # and outside this function as it can be setup prior to simulation
-                    groups = group_fn(colliding_parts.astype(int)) # once we have the groups we can count the quantity for each groups, and save it
+                    groups = group_fn(colliding_array.astype(int)) # once we have the groups we can count the quantity for each groups, and save it
                     unique, counts = np.unique(groups, return_counts=True) # so there we may not have all groups in unique
                     collisions[(idx*nb_groups+unique).astype(int),2] = counts
 
                     # tracking - we could add more than that easily
                     # TODO : it's a little counter intuitive to have average being updated outside this function but pmax inside.
                     # but it's ok
-                    tracking[idx,:] = np.array([idx, pmax[idx], np.mean(proba[collidings_couples]),\
-                        average[idx], np.mean(d[collidings_couples])])
+                    tracking[idx,:] = np.array([idx, pmax[idx], np.mean(proba[colliding_couples]),\
+                        average[idx], np.mean(d[colliding_couples])])
                 else:
                     tracking[idx,:] = np.array([idx, pmax[idx], np.nan,\
                                             average[idx], np.nan])
+            
+            # a very long process that should be avoided whenever possible
+            if(species_mass is not None):
+                colliding_parts = parts[colliding_couples]
+                masses = np.zeros((colliding_parts.shape[0],2))
+                for k, part in enumerate(colliding_parts):
+                    masses[k,0] = species_mass[part[0,0]]
+                    masses[k,1] = species_mass[part[1,0]]
 
-            array[collidings_couples] = reflect(array[collidings_couples], vr_norm[collidings_couples])
+            array[colliding_couples] = reflect(colliding_array, vr_norm[colliding_couples], masses)
 
             for k in range(len(array)):
                 c1, c2 = array[k,0], array[k,1]
@@ -130,24 +142,31 @@ def is_colliding(proba):
     return np.where(proba>r)[0] # 1,0).astype(bool)
     # return the indexes where there is in fact collisions
 
-def reflect(arr, vr_norm): # TODO : problem : here we suppose the mass is identical which is not the case 
-    
+def reflect(arr, vr_norm, masses = None): # TODO : problem : here we suppose the mass is identical which is not the case 
     # reflection for an array containing the colliging couple
     # arr here is in fact arr[is_colliding(proba)] 
     # the colliding couples are already selected
+    
+    if(masses is None):
+        coeff1, coeff2 = 0.5, 0.5 # suppose it's same mass
+    else:
+        mass_sum = masses[:,0]+masses[:,1]
+        coeff1, coeff2 = masses[:,0]/mass_sum, masses[:,1]/mass_sum # this time they are 1D-array of size the number of particles
+        coeff1 = np.expand_dims(coeff1, axis = 1)
+        coeff2 = np.expand_dims(coeff2, axis = 1)
+
     r = np.random.random(size = (2,arr.shape[0]))
     ctheta = 2*r[0,:]-1
     stheta = np.sqrt(1-ctheta*ctheta)
     phi = 2*np.pi*r[1,:]
     
-    v_cm = 0.5*(arr[:,0,2:]+arr[:,1,2:]) # conserved quantity for same mass particles
+    v_cm = coeff1*arr[:,0,2:]+coeff2*arr[:,1,2:] # conserved quantity for same mass particles (that from where the 0.5 comes from)
     v_r_ = np.expand_dims(vr_norm, axis = 1)*np.stack((stheta*np.cos(phi), stheta*np.sin(phi), ctheta),  axis = 1) # 
 
-    arr[:,0,2:] = v_cm + 0.5*v_r_
-    arr[:,1,2:] = v_cm - 0.5*v_r_
+    arr[:,0,2:] = v_cm + coeff1*v_r_
+    arr[:,1,2:] = v_cm - coeff2*v_r_
 
     return arr
-
 
 # default groups functions
 def set_groups(n):

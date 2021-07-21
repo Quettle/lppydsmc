@@ -24,13 +24,8 @@ class Saver(object):
                 self.store[k] = self._convert(v, it)
         if(append is not None):
             for k, v in append.items():
-                try :
-                    self.store.append(k,self._convert(v, it))
-                except Exception as e :
-                    print(k)
-                    print(type(v))
-                    # pprint(v.dtypes())
-                    return e
+                self.store.append(k,self._convert(v, it))
+   
     # def close(self):
     #   self.store.close()
 
