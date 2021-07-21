@@ -7,25 +7,37 @@ import numpy as np
 # so I should not DO everything like that but maybe include it in a bigger functions
 # which would be much better
 
-def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_sections, volume_cell, particles_weight, remains, monitoring = True):
+def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_sections, volume_cell, particles_weight, remains, monitoring = False, group_fn = None):
+    # group_fn should not be None if monitoring is True
     # arr : list of arrays
     # works in place for arr but may take very long ...
     # TODO : may return acceptance rates, and stuff like that...
-    collisions = np.zeros(grid.shape)
-    remains, cands = candidates(currents, dt, average, pmax, volume_cell, particles_weight, remains)
-
+    remains[:], cands = candidates(currents, dt, average, pmax, volume_cell, particles_weight, remains)
+    nb_cells = grid.shape[0]
+    nb_species = len(arr)
     # new_pmax = np.copy(pmax)
     
     if(monitoring):
-        monitor = np.array([0, 0]) # norm, proba
+        # setting collisions
+        nb_groups = (nb_species*(nb_species+1))//2
+        n = nb_cells*nb_groups
+        collisions = np.zeros((n,3)) # ['cell_idx','° couples','quantity'] # per cell and colliding couples, thus : nb_cells x nb_species**2 lines
+        # initializing collisions - we could do it outside ...
+        groups_list = np.arange(nb_groups)
+        for k in range(nb_cells):
+            collisions[k*nb_groups:(k+1)*nb_groups] = k
+            collisions[k*nb_groups:(k+1)*nb_groups,1] = groups_list
+
+        # setting tracking
+        tracking = np.zeros((nb_cells, 5)) # ['cell_idx','max_proba','mean_proba','mean_number_of_particles','mean_distance', thus nb_cells lines
 
     for idx, k in enumerate(currents): # TODO : parallelize # looping over cells right now
         if(cands[idx]>0):
-            choice = index_choosen_couples(currents[idx], int(cands[idx]))
-    
+            choice = index_choosen_couples(currents[idx], cands[idx]) # returns couples of colliding particles indexes in GRID - this is why it works !
+
             g = grid[idx]
             parts = np.array([[g[c[0]], g[c[1]]] for c in choice], dtype = int)
-            array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts])
+            array = np.array([[ arr[c[0,0]][c[0,1]] , arr[c[1,0]][c[1,1]] ] for c in parts]) # at this point arrays is an array of couples of [idx_container, idx_in_container]
 
             # selecting the right cross_sections
             if(np.isscalar(cross_sections)):
@@ -37,17 +49,33 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
             d = np.linalg.norm((array[:,1,:2]-array[:,0,:2]), axis = 1)
             
             proba = probability(vr_norm = vr_norm, pmax = pmax[idx], cross_sections = cross_sections_couples) # TODO : at this point, the cross_section depends on the considered couple - this is the only thing that needs changing
-
-            if(monitoring): # summed over all the cells for now
-                monitor = monitor + np.array([np.sum(d), np.sum(proba)])
             
-            # TODO : should update pmax here (or return something)...
             max_proba = np.max(proba)
+
             if(max_proba>1):
                 pmax[idx] = max_proba*pmax[idx]
             
-            collidings_couples = is_colliding(proba)
-            collisions[idx]+=collidings_couples.shape[0]
+            collidings_couples = is_colliding(proba) # indexes in array of the ACTUALLY colliding couples
+
+            if(monitoring):
+                if(collidings_couples.shape[0]>0):
+                    colliding_parts = array[collidings_couples]
+                    # a 2D-array with [[[c1,i1],[c2,i2]], [[c3,i3],[c4,i4]], ...] ; c for container index, i for index in container 
+                    # ideally, we would like to do a groupby on container indexes and then count the number 
+                    # this is the use of group_fn, defined as a lambda function of 'arr' using first *set_groups* then *get_groups*
+                    # and outside this function as it can be setup prior to simulation
+                    groups = group_fn(colliding_parts.astype(int)) # once we have the groups we can count the quantity for each groups, and save it
+                    unique, counts = np.unique(groups, return_counts=True) # so there we may not have all groups in unique
+                    collisions[(idx*nb_groups+unique).astype(int),2] = counts
+
+                    # tracking - we could add more than that easily
+                    # TODO : it's a little counter intuitive to have average being updated outside this function but pmax inside.
+                    # but it's ok
+                    tracking[idx,:] = np.array([idx, pmax[idx], np.mean(proba[collidings_couples]),\
+                        average[idx], np.mean(d[collidings_couples])])
+                else:
+                    tracking[idx,:] = np.array([idx, pmax[idx], np.nan,\
+                                            average[idx], np.nan])
 
             array[collidings_couples] = reflect(array[collidings_couples], vr_norm[collidings_couples])
 
@@ -58,9 +86,8 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
                 arr[c[1,0]][c[1,1]][:] = c2
 
     if(monitoring):
-        return remains, collisions, pmax, monitor # in theory it is useless to return pmax
-    else:
-        return remains, collisions, pmax
+        return collisions, tracking # in theory it is useless to return pmax
+
 
 def candidates(currents, dt, average, pmax, volume_cell, particles_weight, remains):
     """ Returns the number of candidates couples to perform dsmc collisions between particles. (Note that this formula is for one type of particle only => in fact, it is not)
@@ -101,8 +128,9 @@ def probability(vr_norm, pmax, cross_sections): # still per cell
 def is_colliding(proba):
     r = np.random.random(size = proba.shape)
     return np.where(proba>r)[0] # 1,0).astype(bool)
+    # return the indexes where there is in fact collisions
 
-def reflect(arr, vr_norm):
+def reflect(arr, vr_norm): # TODO : problem : here we suppose the mass is identical which is not the case 
     
     # reflection for an array containing the colliging couple
     # arr here is in fact arr[is_colliding(proba)] 
@@ -120,3 +148,18 @@ def reflect(arr, vr_norm):
 
     return arr
 
+
+# default groups functions
+def set_groups(n):
+    groups = np.zeros((n, n))
+    count = 0
+    for i in range(n):
+        for j in range(i, n):
+            groups[i,j] = count
+            groups[j,i] = count
+            count +=1
+    return groups
+
+# now we want a function that returns the groups from the array
+def get_groups(arr, groups):
+    return groups[arr[:,0,0],arr[:,1,0]]

@@ -50,7 +50,7 @@ def system_rectangle(l_x, l_y, offsets = np.array([0,0])):
     points = np.array(rectangle_(l_x, l_y, offsets))
     segments = np.concatenate((points[:3], points[1:]), axis = 1)
     segments = np.concatenate((segments, np.expand_dims(np.concatenate((points[-1],points[0])),axis = 0)), axis = 0)
-    return SystemCreator(segments), [1,3], 3
+    return SystemCreator(segments, [1,3]), 3
 
     # --------------------- Thruster system ----------------- #
 
@@ -79,7 +79,7 @@ def thruster(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = np.a
     # returns an array with the walls for the thruster
     # not optimized but we prioritize the clarity here
     points = thruster_points(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets =offsets)
-    p1, p20 = points[0], points[-1]
+    p1, p20 = points[0], points[-1] 
     segments = np.concatenate((points[1:],points[:19]), axis = 1)
     segments = np.concatenate((segments, np.expand_dims(np.concatenate((p20,p1)), axis = 0)), axis = 0)
     # sorting is realized when the array is created per the SystemCreator. No need to worry at this point.
@@ -98,11 +98,11 @@ def thruster_three_grids(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_
 
 def thruster_three_grids_system(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets = np.array([0,0])):
     segments = thruster_three_grids(w_in, l_in, w_1, l_1, l_int, w_2, l_2, l_int_2, w_3, l_3, w_out, l_out, offsets = offsets)
-    return SystemCreator(segments), [0, 13, 14, 15], 0 
+    return SystemCreator(segments, [0, 13, 14, 15]), 0 
     
 def thruster_system(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = np.array([0,0])):
     segments = thruster(w_in, l_in, w_1, l_1, l_int, w_2, l_2, w_out, l_out, offsets = offsets)
-    return SystemCreator(segments), [0, 10, 9, 11], 0 # system, idx_out_walls, idx_in_wall
+    return SystemCreator(segments,  [0, 10, 9, 11]), 0 # system, idx_out_walls, idx_in_wall
     # 4 out walls : in wall, + P10-P11 + P11 - P12 + P12 - P13
 
     # --------------------- Cylinder system ----------------- #
@@ -117,4 +117,4 @@ def cylinder_system(res, l_x, l_y, c_x, c_y, r, offsets = np.array([0,0])):
     # cylinder itself
     circle = [[c_x+r*np.cos(k*np.pi/res), c_y+r*np.sin(k*np.pi/res), c_x+r*np.cos((k+1)*np.pi/res), c_y+r*np.sin((k+1)*np.pi/res)] for k in range(2*res)]
 
-    return SystemCreator(np.concatenate((segments, circle), axis = 0)), [1,3], 3
+    return SystemCreator(np.concatenate((segments, circle), axis = 0),  [1,3]), 3

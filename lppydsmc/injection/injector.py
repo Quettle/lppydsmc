@@ -1,7 +1,11 @@
 import numpy as np
 # TODO : this functions may also be cythonized.
 
-def maxwellian(in_wall, in_vect, debit, vel_std, dt, remains = 0, drift = 0):
+def get_quantity(debits, remains, dt):
+        remains, qties = np.modf(debits*dt+remains) # returns remains, quantity_to_inject
+        return remains, qties.astype(int)
+        
+def maxwellian(in_wall, in_vect, vel_std, inject_qty, dt, drift = 0):
         # Injecting for one particle and one wall 
         # Returns a list of particle trough the wall
         # Hypothesis :
@@ -10,11 +14,7 @@ def maxwellian(in_wall, in_vect, debit, vel_std, dt, remains = 0, drift = 0):
         #   - gaussian distribution for velocity; no drift
         # in_vect shape is (2,). What we are basically doing is initializing velocity for a injection along +x
         # and then rotating the velocity so we have speed along the right vector.
-        inject_qty_frac = dt * debit + remains
-        inject_qty = int(inject_qty_frac)
-        # ic(inject_qty)
-        remains = inject_qty_frac-inject_qty
-        
+
         # rotating coefficients 
         k1, k2 = in_vect[0], in_vect[1] # ctheta, stheta
 
@@ -36,14 +36,9 @@ def maxwellian(in_wall, in_vect, debit, vel_std, dt, remains = 0, drift = 0):
 
         pos = in_wall[:2]+np.stack((dpx, dpy), axis = 1) + np.random.random(size = (inject_qty,1))*(in_wall[2:]-in_wall[:2]) # radius*in_vect+
 
-        return np.concatenate((pos, vel), axis = 1), remains
+        return np.concatenate((pos, vel), axis = 1)
 
-def dirac(in_wall, in_vect, debit, velocity, dt, remains = 0):
-        inject_qty_frac = dt * debit + remains
-        inject_qty = int(inject_qty_frac)
-        # ic(inject_qty)
-        remains = inject_qty_frac-inject_qty
-        
+def dirac(in_wall, in_vect, velocity, dt, inject_qty):
         # rotating coefficients 
         k1, k2 = in_vect[0], in_vect[1] # ctheta, stheta
 
@@ -59,7 +54,6 @@ def dirac(in_wall, in_vect, debit, velocity, dt, remains = 0):
         vel = np.stack((vx, vy, np.zeros(size = inject_qty)), axis = 1)
 
         # position
-
         pos = in_wall[:2]+np.stack((dpx, dpy), axis = 1) + np.random.random(size = (inject_qty,1))*(in_wall[2:]-in_wall[:2]) # radius*in_vect+
 
-        return np.concatenate((pos, vel), axis = 1), remains
+        return np.concatenate((pos, vel), axis = 1)

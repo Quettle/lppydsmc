@@ -3,7 +3,8 @@ import numpy as np
 
 # ------------------------------- DSMC reactions ---------------------------- #
 
-def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = None): # INPLACE
+def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = None, monitoring = False): # INPLACE
+    # TODO : could use some optimization (and differenciation, this function was thought for recombination and reaction between several species)
     # reactions is a dict listing all available reactions
     # each of them having probability p
     # else we suppose uniform distribution
@@ -20,15 +21,16 @@ def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = Non
             return (proba*p_+1).astype(int)
 
     happening_reactions = p(nb_parts)
-
+    
     masses_reactants = [masses[types_dict[reactant]] for reactant in reactants]
     arrays_reactants = [arrays[types_dict[reactant]] for reactant in reactants] # list of arrays (pointers) towards the arrays containing all the particles of the given reacting particles 
 
     particles_to_add = {}
     reacting_particles = []
     for i, r in enumerate(np.flip(happening_reactions)):
-        if(r == 0):
+        if(r == 0): # if r==0, no reaction !
             continue
+
         idxes = idx_reacting_particles[i]
 
         reacting_particles.append(idxes)
@@ -44,18 +46,12 @@ def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = Non
                 particles_to_add[product].append(part*reduced_masses_products[k]) # this is a list
             else:
                 particles_to_add[product] = [part*reduced_masses_products[k]]
-
-            # arrays[types_dict[product]].add(linear_momentum_reactants*reduced_masses_products[k]) # TODO : this does not work as we need a container here... I hope to not use a container as it is a special thing...
-            # probably going to try to return it instead.
-        # NOTE
-        # deleting in the previous array
-        # only issue is : when we have a several reactants, their indexes in their respective array are not sorted for all (we can sort only on one array)
-        # thus posing problems with future collisions ... as the wrong particles will be selected.
-        # no other way of doing it I think, except may be deleting only afterwards ?
-        # yes, that is what we are going to do.
-        # ONCE every particle has been added in the other arrays, we delete all reactants
+    if(monitoring):
+        return np.array(reacting_particles), particles_to_add, happening_reactions # happening reactions is needed for monitoring reasons.
+        # happening_reactions contains a 1D array of idx between 0 and nb_reactions for the given species 
+        # 0 if no reactions, else the index of the reaction in the associated dictionnary
     return np.array(reacting_particles), particles_to_add
-
+        
 # ----------------------------------- OUSDOAU ------------------------- #
 def basic(arr, count, law): 
     """ Returns an array containing the indexes of the particles that reacted with the walls according to the law *law*.

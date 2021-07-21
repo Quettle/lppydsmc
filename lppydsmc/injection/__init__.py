@@ -1,1 +1,1 @@
-from .injector import maxwellian, dirac
+from .injector import maxwellian, dirac, get_quantity
