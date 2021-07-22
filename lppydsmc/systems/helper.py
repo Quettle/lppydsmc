@@ -20,7 +20,7 @@ def points_to_segments(points):
     nb_of_points = len(points)
     points = np.array(points)
     first, last = points[0], points[-1]
-    segments = np.concatenate((points[1:],points[:nb_of_points-1]), axis = 1)
+    segments = np.concatenate((points[:nb_of_points-1],points[1:]), axis = 1)
     segments = np.concatenate((segments, np.expand_dims(np.concatenate((last,first)), axis = 0)), axis = 0)
     return segments
     # --------------------- Utils functions -------------------- #

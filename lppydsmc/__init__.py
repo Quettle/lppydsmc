@@ -6,6 +6,7 @@ from . import systems
 from . import injection
 from . import advection
 from . import collision
+from . import initialization
 
 # from . import poisson_solver # depends on weather we want to split it or not
 

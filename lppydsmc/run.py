@@ -1,4 +1,4 @@
-from re import X
+from re import S, X
 import lppydsmc as ld
 import numpy as np
 import inspect
@@ -92,11 +92,20 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
     species = kwargs['species'] # dict
     nb_species = len(species)
     system = kwargs['system']
+    points = kwargs['points']
     containers = kwargs['containers'] # dict
     cross_sections_matrix = kwargs['cross_sections_matrix']
     path = kwargs['path']
     reflect_fns = kwargs['reflect_fns']
-    # simulation
+    user_generic_args = kwargs['user_generic_args'] # list
+    user_defined_args = kwargs['user_defined_args'] # dict
+
+    # initialization of particles
+    particles_initialization = kwargs['particles_initialization']
+
+    for specie, params in particles_initialization.items():
+        containers[specie].add_multiple(ld.initialization.particles.initialize(np.array(points), params['quantity'], params['type'], params['params']))
+    # simulation    
     time_step = kwargs['time_step'] # float
     iterations = kwargs['iterations'] # int
     masses = np.array([container.mass() for specie, container in containers.items()])
@@ -105,6 +114,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
     update_functions = kwargs['update_functions']
     args_update_functions = kwargs['args_update_functions']
     schemes = kwargs['schemes']
+
     if(use_fluxes):
         injected_species = kwargs['inject']['species'] # list is enough here I think
         idx_injected_species = [species[s] for s in injected_species]
@@ -178,10 +188,10 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
 
         advect([container.get_array() for specie, container in containers.items()], time, time_step, update_functions, args_update_functions, schemes)
 
-        results_reflect_particles = reflect_out_particles(containers, system, reflect_fns, monitoring) 
+        results_reflect_particles = reflect_out_particles(containers, system, reflect_fns, user_generic_args, user_defined_args, monitoring) 
         # if monitoring is True then return idx_gsi and out_particles (the particles that got out)
         
-        if(monitoring):
+        if(monitoring and use_fluxes):
             # out particles
             for idx, out_parts in enumerate(results_reflect_particles[1]):
                 if(out_parts != []):
@@ -224,16 +234,19 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
                         index=[iteration]*colliding_particles_positions.shape[0], columns = monitor['wall_collisions'].columns))
 
         if(use_dsmc):
-            # try :
-            results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
-                averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
-                    remains_per_cell, dsmc_masses, monitoring, group_fn) # results_dsmc = None if monitoring == False
-            # except Exception as e:
-            #     ax.clear()
-            #     plot_system(ax, containers, system)
-            #     plt.savefig(path/'images'/f'{iteration}.png')
-            #     plt.show()
-            #     raise e
+            try :
+                # print(f'remains_per_cell : {remains_per_cell.shape}')
+                # print(f'averages : {averages.shape}')
+                # print(f'max_proba : {max_proba.shape}')
+                results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
+                    averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
+                        remains_per_cell, dsmc_masses, monitoring, group_fn) # results_dsmc = None if monitoring == False
+            except Exception as e:
+                ax.clear()
+                plot_system(ax, containers, system)
+                plt.savefig(path/'images'/f'{iteration}.png')
+                plt.show()
+                raise e
             if(monitoring):
                 monitor['dsmc_collisions'] = monitor['dsmc_collisions'].append(pd.DataFrame(results_dsmc[0], \
                     index=[iteration]*results_dsmc[0].shape[0], columns = monitor['dsmc_collisions'].columns))
@@ -242,10 +255,10 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
 
         time+=time_step
 
-        if(iteration%10==0): # TODO : for now we use period_saving, but we should add a plotting period
-            ax.clear()
-            plot_system(ax, containers, system)
-            plt.savefig(path/'images'/f'{iteration}.png')
+        # if(iteration%10==0): # TODO : for now we use period_saving, but we should add a plotting period
+        #     ax.clear()
+        #     plot_system(ax, containers, system)
+        #     plt.savefig(path/'images'/f'{iteration}.png')
 
         if(monitoring):
             # adding particles
@@ -315,41 +328,58 @@ def advect(arrays, time, time_step, update_functions, args_update_functions, sch
 
 # --------------- Handle boundaries -------------- #
 
-def reflect_out_particles(containers, system, reflect_fns, monitoring = None): # will also delete particles that got out of the system.
-    a = system.get_dir_vects()
+def reflect_out_particles(containers, system, reflect_fns, user_generic_args, user_defined_args, monitoring = None): # will also delete particles that got out of the system.
     segments = system.get_segments()
     idx_out_segments = system.get_idx_out_segments()
 
     idxes_gsi = []
+
+    # could be defined in a higher function but it's little overhead so it's ok.
+    generic_args = {
+        'cp':None, # depends on the particles
+        'ct':None,
+        'index_walls': None,
+        'mass' : None,
+        'directing_vectors': system.get_dir_vects(),
+        'normal_vectors': system.get_normal_vectors(),
+    }
+
     if(monitoring): out_particles = []
     for k, (specie, container) in enumerate(containers.items()):
         # initializing local variable
         arr = container.get_array()
         container = containers[specie]
-        
-        count = np.full(fill_value = True, shape = arr.shape[0])
-        idxes_out = []
+        generic_args['mass'] = container.mass()
+        absolute_colliding_bool = np.full(fill_value = True, shape = arr.shape[0])
+        absolute_idxes_exited = []
         collided = []
         c = 0
         
-        while(np.count_nonzero(count) > 0): # np.sum(count, where = count == True) > 0):
-            c+=1
-            ct, cp = ld.advection.boundaries.get_possible_collisions(arr[count], segments, a)
-            colliding_particles, idxes_out_, idxes_walls = ld.advection.boundaries.get_indexes(ct, idx_out_segments, old_colliding_particles = count)
-            ld.advection.boundaries.reflect_back_in(arr, colliding_particles, idxes_walls, a, ct, cp, reflect_fns[k]) # in place
-            
-            idxes_out.append(idxes_out_)
+        while(np.count_nonzero(absolute_colliding_bool) > 0): # np.sum(count, where = count == True) > 0):
+            c+=1    
+            ct, cp = ld.advection.boundaries.get_possible_collisions(arr[absolute_colliding_bool], segments, generic_args['directing_vectors']) # ct, cp - size of arr[count]
+            # colliding_particles and idxes_walls is size of ct meaning arr[count], while idxes_out_ only contains the idxes of the particles that exited the system
+            relative_colliding_bool, relative_idxes_exiting, idxes_walls = ld.advection.boundaries.get_relative_indexes(ct, idx_out_segments)
+            # here we need all to have the same shape.
+            generic_args['cp'] = cp
+            generic_args['ct'] = ct
+            generic_args['index_walls'] = idxes_walls
+            absolute_idxes_exited_ = ld.advection.boundaries.get_absolute_indexes(absolute_colliding_bool, relative_colliding_bool, relative_idxes_exiting)
+            # arr require the absolute indexes, while idxes_walls, ct and cp require relative_colliding_bool
+            ld.advection.boundaries.reflect_back_in(arr, absolute_colliding_bool, relative_colliding_bool, generic_args, reflect_fns[k], user_generic_args[k], user_defined_args[k]) # in place
+
+            absolute_idxes_exited.append(absolute_idxes_exited_)
 
             # the first one that is received is the number of particles colliding with walls.
             if(c == 1):
-                collided = np.copy(count) # np.where(collided[:collided_current], 1, 0)
+                collided = np.copy(absolute_colliding_bool) # np.where(collided[:collided_current], 1, 0)
                 
-        if(len(idxes_out)>0):
-            idxes_out = np.sort(np.concatenate(idxes_out))
+        if(len(absolute_idxes_exited)>0):
+            absolute_idxes_exited = np.sort(np.concatenate(absolute_idxes_exited))
             
             collided_current = collided.shape[0]
             
-            for idx in np.flip(idxes_out): # view = constant time 
+            for idx in np.flip(absolute_idxes_exited): # view = constant time 
                 collided[idx] = collided[collided_current-1]
                 collided_current -= 1
                 
@@ -357,9 +387,9 @@ def reflect_out_particles(containers, system, reflect_fns, monitoring = None): #
             # idxes_gsi.append(list(np.expand_dims(np.where(collided[:collided_current])[0], axis = 1)))
             idxes_gsi.append(list(np.where(collided[:collided_current])[0]))
 
-            idxes_out_ = container.pop_multiple(idxes_out)
+            absolute_idxes_exited_ = container.pop_multiple(absolute_idxes_exited)
             
-            if(monitoring): out_particles.append(idxes_out_)
+            if(monitoring): out_particles.append(absolute_idxes_exited_)
 
         else:
             idxes_gsi.append([]) # appending empty list to conserve the correspondance between rank in the global list and species
@@ -453,18 +483,14 @@ def setup(p):
     species['names'] = [k for k in species['key_to_int']]
     params_species = convert(p['species']['list'])
 
-    volume = ld.utils.estimation.estimate_surface(samples = int(1e4), points = points)[0]
+    volume = ld.utils.estimation.estimate_surface(samples = int(1e4), points = points)[0]*p['system']['dz']
     safety_factor = 2
-    size_arrays = safety_factor * params_species['densities'] * volume * p['system']['dz'] # volume is approximated using a Monte Carlo method.
+    size_arrays = safety_factor * params_species['densities'] * volume # volume is approximated using a Monte Carlo method.
     
     cross_sections_matrix = get_cross_sections(params_species['radii']) # hard sphere model
 
-    # TODO : intializing mean speeds is required too, since it will be changed if we need to load something but in a first approximation we need something
-    # however we dont know... May be we can ask the user ? 
-    # What should we do if there is no injection ? 
-    # For now, I think it's safe to say that if use_fluxes != True, then since there is no 'init particles in system' available now, we should simply return an error message
-    if(not p['use_fluxes']):
-        print('You either need particles in the system (UNAVAILABLE) or have an injection to launch a simulation. Here *use_fluxes* is {}'.format(p['use_fluxes']))
+    if(not p['use_fluxes'] and not p['use_particles_initialization']):
+        print('You either need particles in the system or have an injection to launch a simulation.')
         raise ValueError
 
     if(p['use_dsmc']):
@@ -522,14 +548,17 @@ def setup(p):
         import lppydsmc.poisson_solver as ps
         poisson = p['system']['poisson_solver']
 
+    
     # /!\ Setting the parameters used in the simulation.
     p['setup'] = {}
     p['setup']['system'] = system
+    p['setup']['points'] = points
     p['setup']['species'] = species['key_to_int']
     p['setup']['cross_sections_matrix'] = cross_sections_matrix
     p['setup']['path'] = p['directory']/p['name']
         # reflection on boundaries - reflect_fns
-    p['setup']['reflect_fns'] = reflection_functions_setup(p['system']['reflect_fns'], p['setup']['species'])
+    p['setup']['reflect_fns'], p['setup']['user_generic_args'], p['setup']['user_defined_args'] = \
+        reflection_functions_setup(p['system']['reflect_fns'], p['setup']['species'])
         # simulation
     p['setup']['time_step'] = p['simulation']['time_step'] # float
     p['setup']['iterations'] = p['simulation']['iterations'] # int
@@ -539,15 +568,37 @@ def setup(p):
     masses = params_species['masses']
     radii = params_species['radii']
     p['setup']['containers'] = {types[k] : ld.data_structures.Particle(types[k], charges[k], masses[k], radii[k], size_arrays[k]) for k in range(params_species['count'])}
-        # dsmc
+        # particles initialization
+    densities_ = densities if not p['use_dsmc'] else dsmc['densities_dsmc']
+    p['setup']['particles_initialization'] = particles_initialization_setup(p['species']['initialization'], species['key_to_int'], masses, quantities = densities_*volume) 
+        # dsmc  
     if(p['use_dsmc']):
         p['setup']['dsmc'] = {}
         p['setup']['dsmc']['grid'] = ld.data_structures.Grid(dsmc['cells_number'], max_size)
         p['setup']['dsmc']['resolutions'] = dsmc['grid']['resolutions']
         p['setup']['dsmc']['use_same_mass']  = dsmc['use_same_mass']
+
         # TODO : the setup of mean_speeds should be much better than that. And also, this should be max(sigma*c_r), not max(sigma)max(c_r)
         # we can not multiply those two as mean_speeds can be of a lesser dimension than sigma
-        p['setup']['dsmc']['max_proba'] = 2*np.max(mean_speeds)*np.max(p['setup']['cross_sections_matrix'])*np.ones(p['setup']['dsmc']['grid'].current.shape)
+        
+        
+        # p['setup']['dsmc']['max_proba'] = 2*np.max(mean_speeds)*np.max(p['setup']['cross_sections_matrix'])*np.ones(p['setup']['dsmc']['grid'].current.shape)
+        mean_speeds_init_proba = np.full((len(species['names'])), 1e-15)
+        c = 0
+        for i, s in enumerate(species['names']):
+            
+            if(s in p['setup']['particles_initialization']): # in particles init - priority to init to
+                params_s = p['setup']['particles_initialization'][s]
+                mean_speeds_init_proba[i] = get_mean_speed(params_s)
+            elif(p['use_fluxes'] and s in fluxes['names']): # in fluxes
+                mean_speeds_init_proba[i] = mean_speeds[c]
+                c+=1
+            else : # unchanged, but in this case, the particles is 'useless' because it's is not initialized and not injected.
+                   # unless of course it it will becreated trough reactions
+                   # so maybe try a better init here
+                pass
+
+        p['setup']['dsmc']['max_proba'] = init_max_proba(radii, mean_speeds_init_proba, dsmc['cells_number']) # grid use a 1D-structure
         p['setup']['dsmc']['cell_volume'] = dsmc['cell_volume']
         p['setup']['dsmc']['particles_weight'] = dsmc['particles_weight']
         p['setup']['dsmc']['mean_numbers_per_cell'] = dsmc['mean_numbers_per_cell']
@@ -578,7 +629,7 @@ def setup(p):
             integration_setup(p['simulation']['integration'], p['setup']['species'], masses, charges)
 
     # since it is a inplace function, we dont need to return anything.
-
+    
 # ------------------ utils -------------------------- #
 
 def integration_setup(integration_params, species_to_int, masses, charges, electric_field = None, potential_field = None):
@@ -616,37 +667,68 @@ def integration_setup(integration_params, species_to_int, masses, charges, elect
 def reflection_functions_setup(reflection_params, species_to_int):
     nb_species = len(species_to_int)
     default_reflect_fn = None, None, None
+
     if('default' in reflection_params):
         default_reflect_fn = ld.advection.boundaries.reflection_functions_dispatcher(reflection_params['default']['reflect_fn'])
+        default_user_generic_args = reflection_params['default']['generic_args'] # list
+        default_user_defined_args = reflection_params['default']['args'] # dict
 
     reflect_fns = [default_reflect_fn]*nb_species
-    
+    user_generic_args_list = [default_user_generic_args]*nb_species
+    user_defined_args_list = [dict(default_user_defined_args) for k in range(nb_species)]
+
     for key, val in reflection_params.items():
         if(key == 'default'):
             continue
         idx = species_to_int[key]
 
         reflect_fns[idx] = val['reflect_fn']
+        user_generic_args_list[idx] = val['generic_args']
+        user_defined_args_list[idx] = val['args']
 
-    return reflect_fns
+    return reflect_fns, user_generic_args_list, user_defined_args_list
+    
+def particles_initialization_setup(init_params:dict, keys_to_int:dict, masses:np.ndarray, quantities:np.ndarray):
+    species = init_params['species']
+    types = init_params['types']
+    params = init_params['params'] # dict of list - keys are the species
+    # dict linking species to [type, quantity, params]
+    init_params_setup = {}
 
-# useless
-# def init_max_proba(radii, mean_speeds, grid_shape):
-#     # radii and v_mean are of size Ns(number of species)
-#     # grid_shape is of size Nc (the number of cells)
-#     shape_pmax = [radii.shape[0], radii.shape[0]] + list(grid_shape)
-#     pmax = np.ones(tuple(shape_pmax), dtype = float)
-#     cross_sections = np.ones(tuple(shape_pmax), dtype = float)
+    for k, t in enumerate(types):
+        # maxwellian init required the mass of the species (when giving the temp)
+        if(t == 'maxwellian'): params[species[k]] = [params[species[k]][0], masses[keys_to_int[species[k]]]] 
 
-#     for i in range(pmax.shape[0]):
-#         for j in range(i+1):
-#             if(i==j):
-#                 cross_sections[i,j] = np.pi * 4*radii[i]**2
-#                 pmax[i,j] *= 2*mean_speeds[i] * np.pi * 4*radii[i]**2  # we'll take the max proba straight away ?
-#             else:
-#                 cross_sections[i,j] = np.pi * (radii[i]+radii[1])**2 
-#                 pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?
-#     return pmax, cross_sections
+        init_params_setup[species[k]] = {
+            'params' : params[species[k]],
+            'type' : t,
+            'quantity' : int(quantities[keys_to_int[species[k]]])
+        }
+
+    return init_params_setup
+
+def get_mean_speed(params):
+    t = params['type']
+    if(t =='maxwellian'):
+        return ld.utils.physics.maxwellian_mean_speed(params['params'][0],params['params'][1]) # temperature, mass
+    elif(t  =='uniform'):
+        return (params['params'][0]+params['params'][1])*0.5 # (min + max)*0.5
+    else:
+        print(f'Type {t} not recognized. Should be : maxwellian, uniform.')
+        return None
+
+def init_max_proba(radii, mean_speeds, nb_cells_in_grid):
+    # radii and v_mean are of size Ns(number of species)
+    # grid_shape is of size Nc (the number of cells)
+    shape_pmax = [radii.shape[0], radii.shape[0], nb_cells_in_grid]
+    pmax = np.ones(tuple(shape_pmax), dtype = float)
+    for i in range(pmax.shape[0]):
+        for j in range(i+1):
+            if(i==j):
+                pmax[i,j] *= 2*mean_speeds[i] * np.pi * 4*radii[i]**2  # we'll take the max proba straight away ?
+            else:
+                pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?z
+    return pmax.max(axis = (0,1))
 
 def get_cross_sections(radii):
     # radii and v_mean are of size Ns(number of species)

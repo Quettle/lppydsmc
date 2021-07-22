@@ -3,15 +3,20 @@ from random import random
 import numpy.ma as ma
 import numexpr
 
+from ..utils.physics import gaussian
+
 # ------------------------- reflection default functions ------------------ #
 
 def reflection_functions_dispatcher(value):
     if(value == 'diffusive'):
         print('Diffusive is not implemented yet')
         return _reflect_particle_diffusive
+    elif(value == 'couette'):
+        return _couette
     return _reflect_particle_specular # default functions
 
-def _reflect_particle_specular(arr, idxes_walls, a, ct, cp): # _specular
+def _reflect_particle_specular(arr, **kwargs): # _specular
+    a, ct, cp = kwargs['directing_vectors'], kwargs['ct'], kwargs['cp']
     # be careful, Theta is the opposite of the angle between the wall and the default coord system.
     k1, k2 = 2*a[:,0]**2-1, 2*a[:,0]*a[:, 1] # 2*ctheta**2-1, 2*ctheta*stheta # TODO : could be saved before computing, this way it gets even faster
 
@@ -25,8 +30,81 @@ def _reflect_particle_specular(arr, idxes_walls, a, ct, cp): # _specular
 
     return arr
 
-def _reflect_particle_diffusive(arr, a, ct, cp):
+def _reflect_particle_diffusive(arr, **kwargs):
+    # rotating coefficients
+    vel_std = gaussian(kwargs['temperature'], kwargs['mass'])
+    in_vects = kwargs['normal_vectors']
+    quantity = arr.shape[0]
+    k1, k2 = in_vects[:,0], in_vects[:,1] # ctheta, stheta
+
+    # initializing velocity in the system : (in_vect, b, in_vect x b), direct system
+    drift =  0
+    if('drift' in kwargs):
+        drift = kwargs['drift']
+    tangent_drift = 0
+    if('tangent_drift' in kwargs):
+        tangent_drift = kwargs['tangent_drift']
+    u = vel_std * np.sqrt(-2*np.log((1-np.random.random(size = quantity)))) +  drift
+    v = np.random.normal(loc = 0, scale = vel_std, size = quantity) + tangent_drift
+    w = np.random.normal(loc = 0, scale = vel_std, size = quantity) # = vz
+
+    # velocity in the right base
+    vx = u*k1-v*k2  # i.e. : vx = vx*ctheta + vy*stheta
+    vy = v*k1+u*k2  # i.e. : vy = vy*ctheta - vx*stheta
+    vel = np.stack((vx, vy, w), axis = 1)
+
+    arr[:, 2:] = vel[:]
+
+    ct, cp = kwargs['ct'], kwargs['cp']
+    # new position (we could add some scattering which we do not do there)
+    arr[:,0] = cp[:,0]+ct*arr[:,2] # new x pos 
+    arr[:,1] = cp[:,1]+ct*arr[:,3] # new y pos
+
+    # if(in_vects[0,1]<0):assert(all([vel[k,1]<0 for k in range(vel.shape[0])]))
+    # else : assert(all([vel[k,1]>0 for k in range(vel.shape[0])]))
     return arr
+
+def _couette(arr,**kwargs):
+    # here we suppose that idxes 0 and 2 are for left and right boundaries and should thus be specular
+    # while the top boundary is a diffusive + drift 
+    # and the bottom one is purely diffusive
+    a, ct, cp = kwargs['directing_vectors'], kwargs['ct'], kwargs['cp']
+    idxes_walls = kwargs['index_walls']
+
+    # taking right indexes
+    left_and_right = np.where((idxes_walls == 0) | (idxes_walls == 2))[0]
+    top = np.where(idxes_walls == 1)[0]
+    bottom = np.where(idxes_walls == 3)[0]
+
+    # defining the right dicts
+    kwargs_left_and_right = {
+        'directing_vectors':a[left_and_right],
+        'ct':ct[left_and_right], 
+        'cp':cp[left_and_right]
+    }
+
+    kwargs_top = {
+        'temperature':kwargs['temperature'],
+        'mass':kwargs['mass'],
+        'normal_vectors':kwargs['normal_vectors'][top],
+        'tangent_drift': kwargs['drift'],
+        'ct':ct[top], 
+        'cp':cp[top]
+    }
+    kwargs_bottom = {
+        'temperature':kwargs['temperature'],
+        'mass':kwargs['mass'],
+        'normal_vectors':kwargs['normal_vectors'][bottom],
+        'ct':ct[bottom], 
+        'cp':cp[bottom]
+    }
+    arr[left_and_right] = _reflect_particle_specular(arr[left_and_right], **kwargs_left_and_right)
+    arr[top] = _reflect_particle_diffusive(arr[top], **kwargs_top)
+    # arr[top,2] = arr[top,2] + kwargs['drift'] # adding the drift in the x direction
+    arr[bottom] = _reflect_particle_diffusive(arr[bottom], **kwargs_bottom)
+    
+    return arr
+
 # ----------------------------- Wall collision -------------------------- #
 
 # TODO : optimization should be possible for this function 
@@ -136,11 +214,11 @@ def get_possible_collisions(arr, walls, a): # particles are considered as points
 
     return np.where((qty >= 0) & (qty <= 1), t_intersect, np.inf), np.moveaxis(np.where((qty >= 0) & (qty <= 1), np.array([pix,piy]), np.nan), 0, -1) # b/speed
 
-def get_indexes(ct, idx_out_walls, old_colliding_particles):
+def get_relative_indexes(ct, idx_out_walls  ):
     """ Returns a tuple containing:
-        - an 1D-boolean-array of size the number of particles (or ct.shape[0]) where 'True' means the particles is outside the system but did not exited by an "out-wall". 
+        - an 1D-boolean-array of size of the number of particles considered here (or ct.shape[0]) where 'True' means the particles is outside the system but did not exited by an "out-wall". 
         - an array containing the indexes of the particles that exited by an "out-wall".
-        - an 1D-array, of size the number of particles, containing the indexes of the walls with which they may have collided first (not all particles are out of the system) 
+        - an 1D-array, of size the number of particles considered here (i.e. ct.shape[0]), containing the indexes of the walls with which they may have collided first (not all particles are out of the system) 
     Args:
         ct (np.ndarray): 2D-array of shape (nb_particles x nb_walls) containing the intersection times for each particle with each wall
         idx_out_walls (list): List of the walls considered as being "out-walls" - can be empty
@@ -154,7 +232,7 @@ def get_indexes(ct, idx_out_walls, old_colliding_particles):
     possible_exiting_particles = np.isin(idxes_walls, idx_out_walls) # if the wall for min collision time is in idx_out_walls (thoses particles should not be processed)
                                                          # True if the particles got out of the system
                                                          # 1D-array of size the number of particles
-    # since ct can contains rows of np.inf, we have to account only for the particles with positive non-inf collision time 
+    # since ct can contains rows of np.inf, we have to account only for the particles with positive non-inf collision time
     possible_colliding_particles = np.count_nonzero(~np.isinf(ct), axis = 1) 
     possible_colliding_particles = ~(np.where(possible_colliding_particles == 0, 1, possible_colliding_particles)%2).astype(bool) # True if it should collide
 
@@ -162,29 +240,51 @@ def get_indexes(ct, idx_out_walls, old_colliding_particles):
     colliding_particles = np.where(possible_colliding_particles &  ~possible_exiting_particles, True, False) # True if should collide, False otherwise - size of the number of particles
     exiting_particles = np.where(possible_colliding_particles & possible_exiting_particles, True, False) # Out of the system and should collide
     idxes_exiting_particles = np.where(exiting_particles)[0] # indexes of particles out of the system (certain may still not be, we need to verify it is not in the system)
-                                            # True if out of the system (and thus we should not compute collisions for theses ones)
+                                            # True if exited of the system (and thus we should not compute collisions for theses ones)
+    
+    # if(old_colliding_particles is not None): # accounting for those who were already reflected back in
+    #     c = np.where(old_colliding_particles)[0] # returns the index of the particles that had collided and were already reflected   
+    #     old_colliding_particles[c] = old_colliding_particles[c]&colliding_particles # it is updated with the ones particles that after the previous reflection,
+                                              # are now inside (meaning some particles will turn from True to False)
 
-    if(old_colliding_particles is not None): # accounting for those who were already reflected back in
-        c = np.where(old_colliding_particles)[0] # returns the index of the particles that had collided and were already reflected   
-        old_colliding_particles[c] = old_colliding_particles[c]&colliding_particles # it is updated with the ones particles that after the previous reflection,
-                                                 # are now inside (meaning some particles will turn from True to False)
-        idxes_out = c[idxes_exiting_particles] # taking the indexes of the particles stil outside 
-        colliding_particles = old_colliding_particles # c2 is sent back in this function for the next iteration as 'old_colliding_particles'
+    # idxes_out = np.where(old_colliding_particles)[0][idxes_exiting_particles] # indexes of the particle eventually leaving the system after, possibly, several reflections
 
-    return colliding_particles, idxes_out, idxes_walls
+    return colliding_particles, idxes_exiting_particles, idxes_walls
 
-def reflect_back_in(arr, colliding_particles, idxes_walls, walls_directing_vectors, ct, cp, reflect_fn): # ct : collision time, cp : collision position
+
+def get_absolute_indexes(colliding_abs, colliding_relative, relative_idxes_exiting): # returns the indexes in array
+    # colliding and exiting are already the the shape of the array with indexes that are absolute for arr
+    # we need to update those ones
+    c =  np.where(colliding_abs)[0] # indexes of the particles on which we computed the new arrays
+    colliding_abs[c] = colliding_abs[c] & colliding_relative # in place
+    return c[relative_idxes_exiting]
+
+def reflect_back_in(arr, absolute_colliding_bool, relative_colliding_bool, generic_args, reflect_fn, user_generic_args, user_defined_args): # ct : collision time, cp : collision position
     # INPLACE
     # no particles to reflect back in
-    if(np.count_nonzero(colliding_particles)==0) :
+    if(np.count_nonzero(relative_colliding_bool)==0) :
         return
 
-    cp_ = np.take_along_axis(cp, idxes_walls[:,None, None], axis = 1)[colliding_particles, :].squeeze(axis=1) # cp is a 2D-array (containg position (x, y))
-    ct_ = np.take_along_axis(ct, idxes_walls[:,None], axis = 1)[colliding_particles, :].squeeze(axis=1) # ct is a 1D-array (containing times)
-    walls_directing_vectors_ = np.take_along_axis(walls_directing_vectors, idxes_walls[:,None], axis = 0)[colliding_particles, :] # walls_directing_vectors is a 2D-array of 2D-directing vectors
-    idxes_walls_ = idxes_walls[colliding_particles] # np.take_along_axis(idxes_walls, idxes_walls[:,None], axis = 1)[colliding_particles, :].squeeze(axis=1) # idxes_walls is a 1D-array of indexes
-    arr[colliding_particles,:] = reflect_fn(arr[colliding_particles,:], idxes_walls_, walls_directing_vectors_, ct_, cp_)
+    indexes_walls = generic_args['index_walls']
+    if('cp' in user_generic_args):
+        cp = np.take_along_axis(generic_args['cp'], indexes_walls[:,None, None], axis = 1)[relative_colliding_bool, :].squeeze(axis=1) # cp is a 2D-array (containg position (x, y))
+        user_defined_args['cp'] = cp
+    if('ct' in user_generic_args):
+        ct = np.take_along_axis(generic_args['ct'], indexes_walls[:,None], axis = 1)[relative_colliding_bool, :].squeeze(axis=1) # ct is a 1D-array (containing times)
+        user_defined_args['ct'] = ct
+    if('directing_vectors' in user_generic_args):
+        directing_vectors = np.take_along_axis(generic_args['directing_vectors'], indexes_walls[:,None], axis = 0)[relative_colliding_bool, :] # walls_directing_vectors is a 2D-array of 2D-directing vectors
+        user_defined_args['directing_vectors'] = directing_vectors
+    if('normal_vectors' in user_generic_args):
+        normal_vectors = np.take_along_axis(generic_args['normal_vectors'], indexes_walls[:,None], axis = 0)[relative_colliding_bool, :] # walls_directing_vectors is a 2D-array of 2D-directing vectors
+        user_defined_args['normal_vectors'] = normal_vectors
+    if('index_walls' in user_generic_args):
+        index_walls = indexes_walls[relative_colliding_bool] # size becomes less than arr
+        user_defined_args['index_walls'] = index_walls
+    if('mass' in user_generic_args):
+        user_defined_args['mass'] = generic_args['mass']
 
+    arr[absolute_colliding_bool,:] = reflect_fn(arr[absolute_colliding_bool,:], **user_defined_args)    
 
 # --- bins - saved --- #
 

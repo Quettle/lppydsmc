@@ -42,14 +42,14 @@ def read(filename):
 def fn_check(value):
     if(value == 'default'):
         value = '''import numpy as np
-def fn(arr, t, m, q, electric_field):
+def fn(arr, time, mass, charge, electric_field):
     return np.concatenate((arr[:,2:4], np.zeros((arr.shape[0],3))), axis = 1)''' # no acceleration 
     d = {}
     exec(value, d)
     return d['fn']
 
 def reflect_fn_check(value):
-    if(value in ['specular','diffusive']):
+    if(value in ['specular','diffusive','couette']):
         return value
     d = {}
     exec(value, d)
