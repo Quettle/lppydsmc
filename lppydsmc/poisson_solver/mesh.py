@@ -27,6 +27,7 @@ def polygonal(resolution, in_vertices, out_vertices_list = None):
     
     mesh=mshr.generate_mesh(domain, resolution)
 
+    # TODO : add refined mesh
     # if(refine_mesh):
     #     d = mesh.topology().dim()
         

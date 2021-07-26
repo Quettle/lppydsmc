@@ -1,8 +1,12 @@
 import numpy as np
 
 class Container(object):
-    
-    def __init__(self, size_array, number_of_elements, dtype):
+    """ Describes a simple container for entities that can be described by *number_of_elements* elements.
+    The idea is that once created, the Container does not allocate / deallocated any memory. 
+    It is created as an array of max size *size_array* and a pointer (self.current) gives the current position.
+    It also gives a certain number of useful functions on top of it.
+    """
+    def __init__(self, size_array:int, number_of_elements:int, dtype):
         self.size_array = size_array
         self.number_of_elements = number_of_elements
         if(number_of_elements != 0):
@@ -20,19 +24,18 @@ class Container(object):
         self.arr[self.current:self.current+o.shape[0]] = o[:]
         self.current+=o.shape[0]
     
-    # we will have the same issue of not being able to use it I think.
-    # @njit # in the long run, we may want to use
-    
+    # @njit # in the long run, we may want to use that, however the whole class needs to use it.
+    # best is Numba - however we can not use sort('stable') (idxes is almost sorted)
     def delete_multiple(self, idxes, sort = True):
-        # best is Numba - however we can not use sort('stable') (idxes is almost sorted)
-
-        # Previous version - copying array takes lots of time for very big arrs
-        # we could use np.delete() however it changes the size of the return arrays so we have to be more careful
-        # self.arr[:self.size_array-idxes.shape[0],:] = np.delete(self.arr, idxes, axis = 0) # operation is not inplace
-        # self.current-=idxes.shape[0]
-
+        """Delete multiple entities in the smartest way possible in order to diminish computations as much as possible.
+            - iterating from the end to conserve indexes
+            - simply swapping entities to be deleted with the last active one in the array
+        Args:
+            idxes (np.ndarray or list): the indexes of the entities to remove.
+            sort (bool, optional): if *idxes* are already sorted. Defaults to True.
+        """
         if(sort): idxes.sort() # inplace
-        # forced to loop 
+        # forced to loop but it's better than using np.remove which is not inplace.
         for idx in np.flip(idxes): # view = constant time 
             self.arr[idx] = self.arr[self.current-1]
             self.current -= 1
@@ -46,10 +49,18 @@ class Container(object):
         self.arr[idx] = self.arr[self.current-1]
         self.current -= 1
 
-    def pop_multiple(self, idxes):
-        idxes.sort() # inplace
-        # forced to loop 
-        tmp = np.copy(self.arr[idxes])
+    def pop_multiple(self, idxes, sort = True):
+        """ Same as *delete_multiple* but returns it.
+
+        Args:
+            idxes (np.ndarray or list): the indexes of the entities to remove.
+            sort (bool, optional): if *idxes* are already sorted. Defaults to True.
+
+        Returns:
+            [np.ndarray]: entities that were deleted
+        """
+        if(sort): idxes.sort() # inplace
+        tmp = self.arr[idxes] # np.copy(self.arr[idxes]) # np.copy is useless here as self.arr[idxes] is already a copy.
         for idx in np.flip(idxes): # view = constant time
             self.arr[idx] = self.arr[self.current-1]
             self.current -= 1

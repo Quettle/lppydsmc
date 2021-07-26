@@ -1,11 +1,16 @@
 # Imports
 import numpy as np
 
-# my modules
+# local modules
 from .creator import SystemCreator
 
 # -------------------- This Module -------------------------- #
-# this module allows an easier use of different default systems 
+"""
+This module gives an aid for defining basic systems :
+    - thruster (with the geometry you want). Call : thruster_three_grids_system, thruster_system
+    - rectangle. Call : system_rectangle.
+    - rectangle with a cylinder obstacle. Call : cylinder_system.
+"""
 
 def points_to_segments(points):
     """Convert a list of points, given in clockwise order compared to the inside of the system to a list of segments.

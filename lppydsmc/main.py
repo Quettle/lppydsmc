@@ -1,3 +1,6 @@
+""" Main function to launch a full scale simulation from the command line using the configuration files.
+"""
+
 # local import
 from .run import run
 

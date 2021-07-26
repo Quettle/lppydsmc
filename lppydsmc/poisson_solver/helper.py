@@ -1,6 +1,11 @@
 import numpy as np
 
+"""
+Help for defining the boundaries conditions for the thruster problem. Note : the dimensions are fixes and given in *dimensions_default*.
+"""
+
 dp = 0.001
+
 dimensions_default = {
             'w_in' : 5*dp,
             'l_in' : 3*dp,

@@ -8,10 +8,11 @@ from . import advection
 from . import collision
 from . import initialization
 
-# from . import poisson_solver # depends on weather we want to split it or not
+# from . import poisson_solver # not imported so we are not forced to make it
+                               #  work to run simulations without the need for poisson solver
 
 from . import config
 
 # main files
-from . import run
+from .run import run
 from . import main

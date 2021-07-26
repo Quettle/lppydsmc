@@ -1,19 +1,15 @@
-from re import S, X
 import lppydsmc as ld
+
 import numpy as np
-import inspect
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 import os
-import matplotlib.pyplot as plt
-from pprint import pprint
 
 def run(path_to_cfg, save):
     p = ld.config.cfg_reader.read(path_to_cfg) # parameters
 
     setup(p) # modify p in place
-
 
     # add option to remove the previous directory if it exists (because it can create issues with the simulations)
     # Note : it should depends on the option of the user
@@ -55,10 +51,10 @@ def run(path_to_cfg, save):
                 'period_saving' : p['monitoring']['period_saving'],
                 'saver' : saver,
             }
-            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], monitor_dict = monitor_dict, **p['setup'])
+            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = monitor_dict, **p['setup'])
 
     else:
-        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], monitor_dict = None, **p['setup'])
+        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = None, **p['setup'])
 
     return p
 
@@ -86,7 +82,7 @@ def convert_object(o):
             return o
 # ----------------- Simulation functions ---------------------- #
 
-def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
+def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, monitor_dict, **kwargs):
 
     # ------- Final setup ---------- #
     species = kwargs['species'] # dict
@@ -102,9 +98,11 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
 
     # initialization of particles
     particles_initialization = kwargs['particles_initialization']
-
+    particles_in_system = 0
     for specie, params in particles_initialization.items():
         containers[specie].add_multiple(ld.initialization.particles.initialize(np.array(points), params['quantity'], params['type'], params['params']))
+        particles_in_system+=params['quantity']
+
     # simulation    
     time_step = kwargs['time_step'] # float
     iterations = kwargs['iterations'] # int
@@ -145,11 +143,23 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
     if(use_reactions):
         boundaries_reactions = kwargs['reactions']['boundaries']
    
+    disable = False
 
-        # useful
-    
-    
-    time = 0.   
+    if(use_verbose):
+        from time import time
+        disable = True
+        period_verbose = kwargs['verbose']['period']
+        print('|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|'.format(' it ', ' INIT ', ' INJECT ', ' DEL ', ' C. WALLS ', ' C. PARTS ', ' REACT ', ' EXEC TIME (s) '))
+        print('{:-^94}'.format(''))
+        
+
+    if(use_plotting):
+        import matplotlib.pyplot as plt 
+        fig, ax = plt.subplots(constrained_layout = True)
+        if(kwargs['plotting']['plot_distribution']):
+            plot_distribution = kwargs['plotting']['plot_distribution']
+            fig2, axes = plt.subplots(2,1,constrained_layout = True)
+        period_plotting = kwargs['plotting']['period']
 
     # Monitoring    
     monitoring = False
@@ -170,38 +180,58 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
             groups = ld.collision.collider.set_groups(nb_species)
             group_fn = lambda arr : ld.collision.collider.get_groups(arr, groups)
 
-    fig, ax = plt.subplots(constrained_layout = True)
-
-
+    current_time = 0.   
     # SIMULATING HERE  
-    for iteration in tqdm(range(iterations)):
+
+    nb_out_particles = 0
+    nb_init_particles = particles_in_system
+    nb_injected_particles = 0 if use_fluxes else 'NA'
+    nb_collisions_with_walls = 0
+    nb_collisions_dsmc = 0 if use_dsmc else 'NA'
+    nb_reactions = 0 if use_reactions else 'NA'
+    exec_time = 0
+    for iteration in tqdm(range(1, iterations+1), disable=disable):
+
+
+        if(use_verbose and (iteration-1)%period_verbose==0): # plot for the previous iterations
+            if(iteration-1!= 0): verbose_time = '{:.3e}'.format((time()-exec_time)/period_verbose)
+            else : verbose_time = 0
+            print('|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^10}|{:^15}|'.format(iteration-1, nb_init_particles, nb_injected_particles, nb_out_particles, \
+                nb_collisions_with_walls, nb_collisions_dsmc, nb_reactions, verbose_time))
+            exec_time = time() # TODO : ignore monitoring exec time ?
 
         # right time to monitor
         if(monitor_dict is not None and iteration%period_adding == 0): monitoring = True
 
         if(use_fluxes):
             inject_qties = inject(injected_species, containers, in_wall, in_vect, debits, vel_stds, time_step, remains, drifts)
-
+            
+            nb_injected_particles = np.sum(inject_qties)
+            nb_init_particles += nb_injected_particles
             if(monitoring):
                 fluxes_arr[idx_injected_species, 0] = inject_qties # saved right after (waiting for out-particles)
                 
 
-        advect([container.get_array() for specie, container in containers.items()], time, time_step, update_functions, args_update_functions, schemes)
+        advect([container.get_array() for specie, container in containers.items()], current_time, time_step, update_functions, args_update_functions, schemes)
 
         results_reflect_particles = reflect_out_particles(containers, system, reflect_fns, user_generic_args, user_defined_args, monitoring) 
         # if monitoring is True then return idx_gsi and out_particles (the particles that got out)
-        
-        if(monitoring and use_fluxes):
-            # out particles
-            for idx, out_parts in enumerate(results_reflect_particles[1]):
-                if(out_parts != []):
-                    array = np.concatenate((out_parts, np.full((out_parts.shape[0],1), idx)), axis = 1) 
-                    monitor['out_particles'] = monitor['out_particles'].append(pd.DataFrame(array, index = np.full(array.shape[0], iteration), columns = monitor['out_particles'].columns))
-                    fluxes_arr[idx, 1] = out_parts.shape[0]
-                else:
-                    fluxes_arr[idx, 1] = 0
-            monitor['fluxes'] = monitor['fluxes'].append(pd.DataFrame(fluxes_arr, index=[iteration]*fluxes_arr.shape[0], \
-                    columns = monitor['fluxes'].columns))
+        nb_out_particles = results_reflect_particles[1]
+        nb_init_particles -= nb_out_particles
+        nb_collisions_with_walls = sum([len(collidings) for collidings in results_reflect_particles[0]])
+        if(monitoring):
+            if(use_fluxes):
+                # out particles
+                for idx, out_parts in enumerate(results_reflect_particles[2]):
+                    if(out_parts != []):
+                        array = np.concatenate((out_parts, np.full((out_parts.shape[0],1), idx)), axis = 1) 
+                        monitor['out_particles'] = monitor['out_particles'].append(pd.DataFrame(array, index = np.full(array.shape[0], iteration), \
+                            columns = monitor['out_particles'].columns))
+                        fluxes_arr[idx, 1] = out_parts.shape[0]
+                    else:
+                        fluxes_arr[idx, 1] = 0
+                monitor['fluxes'] = monitor['fluxes'].append(pd.DataFrame(fluxes_arr, index=[iteration]*fluxes_arr.shape[0], \
+                        columns = monitor['fluxes'].columns))
 
             # colliding particles
             colliding_particles_positions = []
@@ -211,7 +241,8 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
                 coll_parts_ = containers[s].get(results_reflect_particles[0][k])[:,:2] # particles that collided with a wall, per species
                 # in the end we are going to add them one after the others in a 1D-array (well infact total_nb_collisions x 3 - 3 for (x, y, species))
                 if(coll_parts_.shape[0]>0):
-                    colliding_particles_positions.append(np.concatenate((coll_parts_, np.full(shape = (coll_parts_.shape[0],1), fill_value = k)), axis = 1)) # only x and y
+                    colliding_particles_positions.append(np.concatenate((coll_parts_, np.full(shape = (coll_parts_.shape[0],1), fill_value = k)),\
+                        axis = 1)) # only x and y
             if(colliding_particles_positions != []):
                 colliding_particles_positions = np.concatenate(colliding_particles_positions) # not sure this works
                 if(not use_reactions): # in the case we use reactions, we then add the reaction for each particle (if ones happens that is)
@@ -219,7 +250,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
                          index=[iteration]*colliding_particles_positions.shape[0], columns = monitor['wall_collisions'].columns))
 
         if(use_reactions):
-            happening_reactions_relative_indexes = recombine(results_reflect_particles[0], \
+            nb_reactions, happening_reactions_relative_indexes = recombine(results_reflect_particles[0], \
                 containers, boundaries_reactions, masses, species, monitoring) # None if monitoring is False
                 # if monitoring is not False, then happening_reactions_relative_indexes is for now a list of 1D-arrays of different sizes
 
@@ -230,35 +261,44 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
                     # colliding_particles_positions shape : total_nb_collisions x 3
                     # happening_reactions_relative_indexes : total_nb_collisions (we need to expand dims in the axis = 1)
                     # then concatenate along that axis
-                    monitor['wall_collisions'] = monitor['wall_collisions'].append(pd.DataFrame(np.concatenate((colliding_particles_positions, np.expand_dims(happening_reactions_relative_indexes, axis = 1)), axis = 1),\
-                        index=[iteration]*colliding_particles_positions.shape[0], columns = monitor['wall_collisions'].columns))
+                    monitor['wall_collisions'] = monitor['wall_collisions'].append(pd.DataFrame(np.concatenate((colliding_particles_positions, \
+                        np.expand_dims(happening_reactions_relative_indexes, axis = 1)), axis = 1),\
+                        index=[iteration]*colliding_particles_positions.shape[0], \
+                            columns = monitor['wall_collisions'].columns))
 
         if(use_dsmc):
-            try :
-                # print(f'remains_per_cell : {remains_per_cell.shape}')
-                # print(f'averages : {averages.shape}')
-                # print(f'max_proba : {max_proba.shape}')
-                results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
-                    averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
-                        remains_per_cell, dsmc_masses, monitoring, group_fn) # results_dsmc = None if monitoring == False
-            except Exception as e:
-                ax.clear()
-                plot_system(ax, containers, system)
-                plt.savefig(path/'images'/f'{iteration}.png')
-                plt.show()
-                raise e
+            # try :
+            results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
+                averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
+                    remains_per_cell, dsmc_masses, monitoring, group_fn)
+            nb_collisions_dsmc = results_dsmc[0]
+
+            # except Exception as e:
+            #     ax.clear()
+            #     plot_system(ax, containers, system)
+            #     plt.savefig(path/'images'/f'{iteration}.png', dpi = 300)
+            #     plt.show()
+            #     raise e
             if(monitoring):
-                monitor['dsmc_collisions'] = monitor['dsmc_collisions'].append(pd.DataFrame(results_dsmc[0], \
-                    index=[iteration]*results_dsmc[0].shape[0], columns = monitor['dsmc_collisions'].columns))
-                monitor['dsmc_tracking'] = monitor['dsmc_tracking'].append(pd.DataFrame(results_dsmc[1], \
-                    index=[iteration]*results_dsmc[1].shape[0], columns = monitor['dsmc_tracking'].columns))
+                monitor['dsmc_collisions'] = monitor['dsmc_collisions'].append(pd.DataFrame(results_dsmc[1], \
+                    index=[iteration]*results_dsmc[1].shape[0], columns = monitor['dsmc_collisions'].columns))
+                monitor['dsmc_tracking'] = monitor['dsmc_tracking'].append(pd.DataFrame(results_dsmc[2], \
+                    index=[iteration]*results_dsmc[2].shape[0], columns = monitor['dsmc_tracking'].columns))
 
-        time+=time_step
+        current_time+=time_step
+    
+        if(use_plotting and iteration%period_plotting==0):
+            ax.clear()
+            plot_system(ax, containers, system)
+            fig.savefig(path/'images'/f'{iteration}.png', dpi = 300)
 
-        # if(iteration%10==0): # TODO : for now we use period_saving, but we should add a plotting period
-        #     ax.clear()
-        #     plot_system(ax, containers, system)
-        #     plt.savefig(path/'images'/f'{iteration}.png')
+            if(plot_distribution):
+                axes[0].clear()
+                axes[1].clear()
+                plot_velocity_distribution(axes, containers)
+                fig2.savefig(path/'images'/f'distrib_{iteration}.png', dpi = 300)
+
+            # maybe add more than that ...
 
         if(monitoring):
             # adding particles
@@ -269,7 +309,8 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
                 # which makes it easier for pandas.
                 # Alternatively, we could save specie
                 # however it caused issues when analyzing in the past
-                monitor['particles'] = monitor['particles'].append(pd.DataFrame(array, index = np.full(array.shape[0], iteration), columns = monitor['particles'].columns))
+                monitor['particles'] = monitor['particles'].append(pd.DataFrame(array, index = np.full(array.shape[0], iteration), \
+                    columns = monitor['particles'].columns))
 
 
         if(monitoring and iteration%period_saving == 0):
@@ -285,14 +326,33 @@ def simulate(use_fluxes, use_dsmc, use_reactions, monitor_dict, **kwargs):
         monitoring = False
     
 # ---------------- Plotting ---------------- #
-def plot_system(ax, containers, system):
+def plot_system(ax, containers, system): # add it to the plotting tools may be wiser ...
     for segment in system.get_segments():
         ax.plot(segment[[0,2]], segment[[1,3]], color = 'k')
 
     for specie, container in containers.items():
         arr = container.get_array()
-        ax.scatter(arr[:,0], arr[:,1], label = specie)
+        ax.scatter(arr[:,0], arr[:,1], label = specie, s = 0.1)
     ax.legend(loc='best')
+    ax.axis('equal')
+
+def plot_velocity_distribution(axes, containers):
+    vx, vy = [], []
+    species = []
+    for specie, container in containers.items():
+        arr = container.get_array()
+        vx.append(arr[:,2])
+        vy.append(arr[:,3])
+        species.append(specie)
+
+    axes[0].hist(vx, label = species, bins = 'auto', stacked = True, histtype = 'barstacked')
+    axes[1].hist(vy, label = species, bins = 'auto', stacked = True, histtype = 'barstacked')
+    
+    axes[0].legend(loc='best')
+    axes[1].legend(loc='best')
+
+    axes[0].set_xlabel('vx (m/s)')
+    axes[1].set_xlabel('vy (m/s)')
 
 def init_monitor(use_fluxes, use_dsmc, use_reactions): # 1-layer dictionnary to make saving easier
     monitor = {}
@@ -303,12 +363,14 @@ def init_monitor(use_fluxes, use_dsmc, use_reactions): # 1-layer dictionnary to 
         monitor['fluxes'] = pd.DataFrame(columns = ['in','out','species'])
         monitor['out_particles'] = pd.DataFrame(columns = ['x','y','vx','vy','vz','species'])
     if(use_dsmc):
-        monitor['dsmc_collisions'] = pd.DataFrame(columns = ['quantity','idx_reactions','cell_idx'])
+        monitor['dsmc_collisions'] = pd.DataFrame(columns = ['cell_idx','idx_reactions','quantity'])
         monitor['dsmc_tracking'] = pd.DataFrame(columns = ['cell_idx','max_proba','mean_proba','mean_number_of_particles','mean_distance']) # the 3 last fields are for particles that collided !
         # max_proba is the max_proba used to "normalize" the probabilities
 
     if(use_reactions):
         monitor['wall_collisions'] = pd.DataFrame(columns = ['x','y','species','reaction'])
+    else:
+        monitor['wall_collisions'] = pd.DataFrame(columns = ['x','y','species'])
 
     return monitor
 
@@ -343,6 +405,8 @@ def reflect_out_particles(containers, system, reflect_fns, user_generic_args, us
         'directing_vectors': system.get_dir_vects(),
         'normal_vectors': system.get_normal_vectors(),
     }
+
+    nb_out_particles = 0
 
     if(monitoring): out_particles = []
     for k, (specie, container) in enumerate(containers.items()):
@@ -388,33 +452,35 @@ def reflect_out_particles(containers, system, reflect_fns, user_generic_args, us
             idxes_gsi.append(list(np.where(collided[:collided_current])[0]))
 
             absolute_idxes_exited_ = container.pop_multiple(absolute_idxes_exited)
-            
+            nb_out_particles+=absolute_idxes_exited_.shape[0]
             if(monitoring): out_particles.append(absolute_idxes_exited_)
 
         else:
             idxes_gsi.append([]) # appending empty list to conserve the correspondance between rank in the global list and species
             if(monitoring): out_particles.append([])
     if(monitoring):
-        return idxes_gsi, out_particles
+        return idxes_gsi, nb_out_particles, out_particles, 
 
-    return (idxes_gsi,) # should at some point also return cos_alpha (or rather the radial / azimutal angle if necessary, depending on whatI decied on MD)
+    return idxes_gsi, nb_out_particles
 
 def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = False): # catalytic boundary recombination - inplace 
     particles_to_add = {}
     arrays = [container.get_array() for specie, container in containers.items()]
     
+    count_reactions = 0
+
     if(monitoring): happening_reactions_relative_indexes = []
 
     for k, type_part in enumerate(containers):
         if type_part in reactions: # all particles colliding are not necessarily in reactions !
-            idx_reacting_particles = np.expand_dims(np.array(idxes_gsi[k]), axis = 1)
-            results = ld.advection.reactions.react(idx_reacting_particles, arrays = arrays,\
+            idx_colliding_particles = np.expand_dims(np.array(idxes_gsi[k]), axis = 1)
+            results = ld.advection.reactions.react(idx_colliding_particles, arrays = arrays,\
                  masses = masses, types_dict = species, reactions = reactions[type_part], p = None, monitoring = monitoring)
             # results = (np.array(reacting_particles), particles_to_add, happening_reactions) if monitoring, else (np.array(reacting_particles), particles_to_add)
             # reacting_particles should be deleted in arrays[k]
             # particles_to_add should be added the the asssociated array
             idxes_gsi[k] = results[0] # updating the actually reacting particles
-
+            count_reactions.append(len(results[0]))
             if(monitoring):
                 happening_reactions_relative_indexes.append(results[2])
 
@@ -433,7 +499,7 @@ def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = Fa
         if(type_part in particles_to_add):
             containers[type_part].add_multiple(np.array(particles_to_add[type_part]))
 
-    if(monitoring): return happening_reactions_relative_indexes # reactions actually happening in the idxes_gsi
+    if(monitoring): return count_reactions, happening_reactions_relative_indexes # reactions actually happening in the idxes_gsi
                                                                 # happening_reactions_relative_indexes contains a list of array (1 array = 1 species)
                                                                 # containing, for each colliding particles, a number between 0 and nb_rections for the given species
                                                                 # 0 being no-reaction
@@ -448,7 +514,7 @@ def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, 
     for k in range(len(arrays)):
         arr = arrays[k]
         new_positions = ld.data_structures.grid.default_hashing(ld.data_structures.grid.pos_in_grid(arr[:,:2], \
-            resolutions, system_offsets, system_shape), res_y = resolutions[1])  
+            resolutions, system_offsets, system_shape), res = resolutions[1])  
         parts_in_grid_format = ld.data_structures.grid.convert_to_grid_format(new = new_positions.shape[0], old = 0,\
              container_idx = k)
         grid.add_multiple(new_positions, parts_in_grid_format)
@@ -458,10 +524,10 @@ def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, 
     currents = grid.get_currents()
     averages = (iteration*averages+currents)/(iteration+1) # TODO: may be it too violent ? 
 
-    return ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, time_step, \
+    results = ld.collision.handler_particles_collisions(arrays, grid.get_grid(), currents, time_step, \
             averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, masses, monitoring = monitoring, group_fn = group_fn) # inplace for remains_per_cell
-    # None if monitoring = False, else results = remains_per_cell, nb_colls_, pmax, monitor 
-
+    # count_collisions if monitoring = False, else results = count_collisions, collisions, tracking 
+    return results
 # ------------------- Processing params ------------------- #
 
 def setup(p):
@@ -571,6 +637,16 @@ def setup(p):
         # particles initialization
     densities_ = densities if not p['use_dsmc'] else dsmc['densities_dsmc']
     p['setup']['particles_initialization'] = particles_initialization_setup(p['species']['initialization'], species['key_to_int'], masses, quantities = densities_*volume) 
+        # verbose
+    if(p['use_verbose']):
+        p['setup']['verbose'] = {}
+        p['setup']['verbose']['period'] = p['verbose']['period']
+        # plotting
+    if(p['use_plotting']):
+        p['setup']['plotting'] = {}
+        p['setup']['plotting']['period'] = p['plotting']['period']
+        p['setup']['plotting']['plot_distribution'] = p['plotting']['plot_distribution']
+
         # dsmc  
     if(p['use_dsmc']):
         p['setup']['dsmc'] = {}
@@ -698,6 +774,7 @@ def particles_initialization_setup(init_params:dict, keys_to_int:dict, masses:np
     for k, t in enumerate(types):
         # maxwellian init required the mass of the species (when giving the temp)
         if(t == 'maxwellian'): params[species[k]] = [params[species[k]][0], masses[keys_to_int[species[k]]]] 
+        elif(t == 'uniform'): pass # nothing to add here (mass is not required here)
 
         init_params_setup[species[k]] = {
             'params' : params[species[k]],
@@ -712,7 +789,7 @@ def get_mean_speed(params):
     if(t =='maxwellian'):
         return ld.utils.physics.maxwellian_mean_speed(params['params'][0],params['params'][1]) # temperature, mass
     elif(t  =='uniform'):
-        return (params['params'][0]+params['params'][1])*0.5 # (min + max)*0.5
+        return (np.abs(params['params'][0])+np.abs(params['params'][1]))*0.5 # (min + max)*0.5
     else:
         print(f'Type {t} not recognized. Should be : maxwellian, uniform.')
         return None

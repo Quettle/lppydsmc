@@ -1,6 +1,21 @@
-
 # Imports
 import numpy as np
+
+"""
+This module defined useful functions and constants.
+
+List of constants (dimension):
+    ATOMIC_MASS (kg)
+    NUCLEON_MASS (kg)
+    ELECTRON_MASS (kg)
+    BOLTZMAN_CONSTANT (J.K−1)
+    ELECTRON_CHARGE (C)
+    ELECTRON_EFFECTIVE_DIAMETER (m)
+    AVOGADRO_CONSTANT (mol-1)
+    GAS_CONSTANT (J.mol-1.K-1)
+    VACUUM_PERMITTIVITY (F.m-1)
+    PA_TO_TORR (Torr/Pa)
+"""
 
 # ------------------------ Constants ----------------------- #
 ATOMIC_MASS = 1.66053906660e-27 # kg
@@ -19,12 +34,23 @@ PA_TO_TORR = 1/(101325/760.) # Torr/Pa - 1 torr is 1/760 of a standard atmospher
 
 # ------------------------ Mass ---------------------------- #
 def get_mass_part(electrons_nb, protons_number, neutrons_number):
+    """ Return the mass of a particle based on the number of electrons / protons / neutrons.
+    Note that is functions support both integers, floats and arrays of integers / floats.
+
+    Args:
+        electrons_nb (int, np.ndarray): the number of electrons
+        protons_number (int, np.ndarray): the number of protons
+        neutrons_number (int, np.ndarray): the number of neutrons
+
+    Returns:
+        int, np.ndarray: the mass of the particle(s)
+    """
     return (neutrons_number+protons_number)*NUCLEON_MASS+electrons_nb*ELECTRON_MASS
 
 # ------------------------ gaussian distribution ----------------- #
 def gaussian(temperature, mass):
-    v_mean = np.sqrt(BOLTZMAN_CONSTANT*temperature/mass)
-    return v_mean
+    std = np.sqrt(BOLTZMAN_CONSTANT*temperature/mass)
+    return std
 
 # ------------------------ Maxwellian distribution ----------------- #
 # mean speed
@@ -37,7 +63,16 @@ def maxwellian_flux(density, v_mean, drift = 0):
 
 # ---------------------- Mean free path - time ------------------------- #
 
-def mean_free_path(cross_section, density): # between two particles of same size
+def mean_free_path(cross_section, density): 
+    """ Compute the mean free path for a monoatomic gas. Note : this function supports vectorization.
+
+    Args:
+        cross_section (float): the cross section of the species
+        density (float): the density in the system
+
+    Returns:
+        float: return the mean free path for a monoatomic gas at gas density *density*.
+    """
     return 1/(np.sqrt(2)*cross_section*density)
 
 def mean_free_time(mfp, v_mean):
