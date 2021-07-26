@@ -38,7 +38,7 @@ Coming soon (if I have the time):
 > You can use the `main.ipynb` notebook to launch easily a first simulation and then you can analyze it using the `analysis.ipynb` notebook.
 
 Using the configuration files and the very high level `lppydsmc.run`:
-### 1. Configuration of the simulation (cf. the [specifications](lppydsmc/config/spec.ini) files or the [examples](lppydsmc/config/spec.ini)).
+### 1. Configuration of the simulation (cf. the [specifications](lppydsmc/config/spec.ini) files or the [examples](./benchmarks/)).
 - Saving name and directory
 - Simulation parameters
 - System
