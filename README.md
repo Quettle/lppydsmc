@@ -2,10 +2,7 @@
 
 ## Installing the environment
 
-
 Several versions of the environment is available, depending on weather you want to use only the basic tools, the poisson solver with [fenics](https://fenicsproject.org/) or the plotting tools too.
-
-TODO : scipy ?
 
 ### Basic 
 ```
@@ -41,38 +38,42 @@ Coming soon (if I have the time):
 > You can use the `main.ipynb` notebook to launch easily a first simulation and then you can analyze it using the `analysis.ipynb` notebook.
 
 Using the configuration files and the very high level `lppydsmc.run`:
-1. Configuration of the simulation (cf. the [specifications](lppydsmc/config/spec.ini) files or the [examples](lppydsmc/config/spec.ini)).
-   1. Saving name and directory
-   2. Simulation parameters
-   3. System
-   4. Species
-   5. Particles initialization (optional)
-   6. Injection (optional)
-   7. DSMC (optional)
-   8. Reactions (optional)
-   9. Poisson solver (optional, requires *fenics* install)
-   10. Monitoring (optional)
-   11. COMING SOON : Plotting and verbose (optional, requires *plotting* install)
-2. Launch the simulation:
-   1. Command line:
-    ```shell
-    conda activate ENV_NAME
-    python main -p <path_to_cfg_file>
-    ```
-   2. Jupyter notebook / lab with the right environment:
+### 1. Configuration of the simulation (cf. the [specifications](lppydsmc/config/spec.ini) files or the [examples](lppydsmc/config/spec.ini)).
+- Saving name and directory
+- Simulation parameters
+- System
+- Species
+- Particles initialization (optional)
+- Injection (optional)
+- DSMC (optional)
+- Reactions (optional)
+- Poisson solver (optional, requires *fenics* install)
+-  Monitoring (optional)
+-  COMING SOON : Plotting and verbose (optional, requires *plotting* install)
+### 2. Launch the simulation:
+- Command line:
+   ```shell
+   conda activate ENV_NAME
+   python main -p <path_to_cfg_file>
+   ```
+
+- Jupyter notebook / lab with the right environment:
     ```python
     import lppydsmc as ld
     path = <path_to_cfg_file>
     ld.run(path, save = True) # save is True by default
     ```
-    At this point, you should see a progress bar with the current iteration and estimated remaining time before completion.
-3. Once the simulation has finished. You can load the `hdf5` file of your simulation :
-   ```python
-   import pandas as pd
-   store = pd.HDFStore(results_path)
-   print(store.keys()) # to see what has been saved (depends on what you activated amongst the optional options)
-   ```
-   You can then explore each dataframes.
+
+At this point, you should see a progress bar with the current iteration and estimated remaining time before completion.
+
+### 3. Once the simulation has finished. You can load the `hdf5` file of your simulation :
+```python
+import pandas as pd
+store = pd.HDFStore(results_path)
+print(store.keys()) # to see what has been saved (depends on what you activated amongst the optional options)
+```
+
+You can then explore each dataframes.
 
 A set a useful plotting tools is available under the folder [plotting](plotting/) [TO BE IMPROVED].
 
