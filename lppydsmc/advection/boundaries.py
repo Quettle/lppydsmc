@@ -23,7 +23,6 @@ def reflection_functions_dispatcher(value):
         [type]: [description]
     """
     if(value == 'diffusive'):
-        print('Diffusive is not implemented yet')
         return _reflect_particle_diffusive
     elif(value == 'couette'):
         return _couette

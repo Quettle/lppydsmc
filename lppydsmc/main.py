@@ -55,7 +55,8 @@ def main(path_to_cfg, save=True):
     else:
         simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = None, **p['setup'])
 
-    return p
+    print('SIMULATION FINISHED')
+    print('Path to results : {}'.format(p['setup']['path']))
 
 # ----------------- convert ------------------- #
 def convert_objects(p):
@@ -189,8 +190,8 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
     nb_collisions_dsmc = 0 if use_dsmc else 'NA'
     nb_reactions = 0 if use_reactions else 'NA'
     exec_time = 0
-    for iteration in tqdm(range(1, iterations+1), disable=disable):
 
+    for iteration in tqdm(range(1, iterations+1), disable=disable):
 
         if(use_verbose and (iteration-1)%period_verbose==0): # plot for the previous iterations
             if(iteration-1!= 0): verbose_time = '{:.3e}'.format((time()-exec_time)/period_verbose)
@@ -270,7 +271,6 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
             results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
                 averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
                     remains_per_cell, dsmc_masses, monitoring, group_fn)
-            nb_collisions_dsmc = results_dsmc[0]
 
             # except Exception as e:
             #     ax.clear()
@@ -279,6 +279,8 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
             #     plt.show()
             #     raise e
             if(monitoring):
+                nb_collisions_dsmc = results_dsmc[0]
+
                 monitor['dsmc_collisions'] = monitor['dsmc_collisions'].append(pd.DataFrame(results_dsmc[1], \
                     index=[iteration]*results_dsmc[1].shape[0], columns = monitor['dsmc_collisions'].columns))
                 monitor['dsmc_tracking'] = monitor['dsmc_tracking'].append(pd.DataFrame(results_dsmc[2], \
@@ -530,10 +532,10 @@ def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, 
 # ------------------- Processing params ------------------- #
 
 def setup(p):
-    p['directory'] = Path(p['directory']).resolve()
+    p['directory'] = (Path(p['directory'])).resolve()
 
     # converting points to segments (which are then sent to the system creator)
-    points = [v for k, v in p['system']['points'].items()]
+    points = [v for k, v in p['system']['points'].items()]  
 
     p['system']['segments'] = ld.systems.helper.points_to_segments(points)
     system = ld.systems.creator.SystemCreator(p['system']['segments'], p['system']['out_boundaries']['out_boundaries'])
@@ -580,7 +582,8 @@ def setup(p):
 
         # adapting the size of the arrays for when creating all the containers
         size_arrays = size_arrays/dsmc['particles_weight'] 
-        size_arrays = size_arrays.astype(int)
+    
+    size_arrays = size_arrays.astype(int)
         
     if(p['use_fluxes']):
         fluxes = p['fluxes']
@@ -595,7 +598,7 @@ def setup(p):
             densities_dsmc = dsmc['densities_dsmc']
             densities = np.array([densities_dsmc[species['key_to_int'][k]] for k in fluxes['names']])
         else:
-            densities = np.array([species[k]['density'] for k in fluxes['names']])
+            densities = np.array([species['list'][k]['density'] for k in fluxes['names']])
 
         temperatures = np.array([v['temperature'] for k, v in fluxes['species'].items()])
         drifts = np.array([v['drift'] for k, v in fluxes['species'].items()])

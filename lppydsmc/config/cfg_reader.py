@@ -1,3 +1,4 @@
+from types import resolve_bases
 from configobj import ConfigObj, flatten_errors
 from validate import Validator
 from pathlib import Path
@@ -19,7 +20,7 @@ def read(filename):
     config = ConfigObj(str(filename), configspec=configspec)
 
     # validating it
-    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check})
+    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check})
     results = config.validate(validator)
 
     if results != True:
@@ -54,3 +55,6 @@ def reflect_fn_check(value):
     d = {}
     exec(value, d)
     return d['reflect_fn']
+
+def directory_check(value):
+    return (Path.cwd()/Path(value)).resolve()

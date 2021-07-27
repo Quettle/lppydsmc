@@ -114,7 +114,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
                 arr[c[1,0]][c[1,1]][:] = c2
 
     if(monitoring):
-        return count_collisions, collisions, tracking# in theory it is useless to return pmax
+        return count_collisions, collisions, tracking # in theory it is useless to return pmax
     return count_collisions
     
 
