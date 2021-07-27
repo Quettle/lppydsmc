@@ -16,7 +16,7 @@ def read(filename):
                         _inspec=True)
 
     # loading the current filename
-    config = ConfigObj(filename, configspec=configspec)
+    config = ConfigObj(str(filename), configspec=configspec)
 
     # validating it
     validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check})
