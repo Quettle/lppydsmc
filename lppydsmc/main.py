@@ -48,6 +48,7 @@ def main(path_to_cfg, save=True):
                 'monitor' : monitor,
                 'period_adding' : p['monitoring']['period_adding'],
                 'period_saving' : p['monitoring']['period_saving'],
+                'offset' : p['monitoring']['offset'],
                 'saver' : saver,
             }
             simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = monitor_dict, **p['setup'])
@@ -171,6 +172,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
         period_saving = monitor_dict['period_saving']
         period_adding = monitor_dict['period_adding']
         saver = monitor_dict['saver']
+        offset = monitor_dict['offset']
         if(use_fluxes):
             fluxes_arr = np.zeros((nb_species,3))
             for k in range(nb_species):
@@ -201,7 +203,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
             exec_time = time() # TODO : ignore monitoring exec time ?
 
         # right time to monitor
-        if(monitor_dict is not None and iteration%period_adding == 0): monitoring = True
+        if(monitor_dict is not None and iteration > offset and iteration%period_adding == 0): monitoring = True
 
         if(use_fluxes):
             inject_qties = inject(injected_species, containers, in_wall, in_vect, debits, vel_stds, time_step, remains, drifts)
