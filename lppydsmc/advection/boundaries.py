@@ -26,6 +26,8 @@ def reflection_functions_dispatcher(value):
         return _reflect_particle_diffusive
     elif(value == 'couette'):
         return _couette
+    elif(value == 'periodic'):
+        return _periodic
     return _reflect_particle_specular # default functions
 
 def _reflect_particle_specular(arr, **kwargs):
@@ -93,6 +95,10 @@ def _reflect_particle_diffusive(arr, **kwargs):
 
     return arr
 
+def _periodic(arr, **kwargs): # for only one wall I think no ?
+    arr[:,:2] += kwargs['translation']
+    return arr
+
 def _couette(arr,**kwargs):
     """ Specific hard coded function for the case of the couette flow with the top boundary being a moving wall (diffusive and drift),
     the bottom one being only a diffusive boundary. While the left and right boundaries follow periodic conditions and are thus considered as specular boundaries.
@@ -106,19 +112,22 @@ def _couette(arr,**kwargs):
     # here we suppose that idxes 0 and 2 are for left and right boundaries and should thus be specular
     # while the top boundary is a diffusive + drift (boundary number 1)
     # and the bottom one is purely diffusive (boundary number 3)
-    a, ct, cp = kwargs['directing_vectors'], kwargs['ct'], kwargs['cp']
+    ct, cp = kwargs['ct'], kwargs['cp']
     idxes_walls = kwargs['index_walls']
 
     # taking right indexes
-    left_and_right = np.where((idxes_walls == 0) | (idxes_walls == 2))[0]
+    left = np.where(idxes_walls == 0)[0]
+    right = np.where(idxes_walls == 2)[0]
     top = np.where(idxes_walls == 1)[0]
     bottom = np.where(idxes_walls == 3)[0]
 
     # defining the right dicts
-    kwargs_left_and_right = {
-        'directing_vectors':a[left_and_right],
-        'ct':ct[left_and_right], 
-        'cp':cp[left_and_right]
+    kwargs_left = {
+        'translation': np.array([kwargs['tx_left'],0])
+    }
+
+    kwargs_right = {
+        'translation': np.array([kwargs['tx_right'],0])
     }
 
     kwargs_top = {
@@ -137,7 +146,8 @@ def _couette(arr,**kwargs):
         'cp':cp[bottom]
     }
     
-    arr[left_and_right] = _reflect_particle_specular(arr[left_and_right], **kwargs_left_and_right)
+    arr[left] = _periodic(arr[left], **kwargs_left)
+    arr[right] = _periodic(arr[right], **kwargs_right)
     arr[top] = _reflect_particle_diffusive(arr[top], **kwargs_top)
     arr[bottom] = _reflect_particle_diffusive(arr[bottom], **kwargs_bottom)
     
