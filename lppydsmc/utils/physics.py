@@ -29,7 +29,7 @@ GAS_CONSTANT = 8.314 # J.mol-1.K-1
 VACUUM_PERMITTIVITY = 8.8541878128e-12 # F.m-1
 
 # ------------------------ Conversion ------------------- #
-
+J_TO_EV = 1/1.6e-19
 PA_TO_TORR = 1/(101325/760.) # Torr/Pa - 1 torr is 1/760 of a standard atmosphere (= 101325 Pa)
 
 # ------------------------ Mass ---------------------------- #

@@ -43,8 +43,7 @@ def handler_particles_collisions(arr, grid, currents, dt, average, pmax, cross_s
         # initializing collisions - we could do it outside ...
         groups_list = np.arange(nb_groups)
         for k in range(nb_cells):
-            collisions[k*
-            nb_groups:(k+1)*nb_groups] = k
+            collisions[k*nb_groups:(k+1)*nb_groups] = k
             collisions[k*nb_groups:(k+1)*nb_groups,1] = groups_list
 
         # setting tracking

@@ -51,10 +51,10 @@ def main(path_to_cfg, save=True):
                 'offset' : p['monitoring']['offset'],
                 'saver' : saver,
             }
-            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = monitor_dict, **p['setup'])
+            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_particles_initialization'], p['use_verbose'], monitor_dict = monitor_dict, **p['setup'])
 
     else:
-        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_verbose'], monitor_dict = None, **p['setup'])
+        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_particles_initialization'], p['use_verbose'], monitor_dict = None, **p['setup'])
 
     print('SIMULATION FINISHED')
     print('Path to results : {}'.format(p['setup']['path']))
@@ -83,7 +83,7 @@ def convert_object(o):
             return o
 # ----------------- Simulation functions ---------------------- #
 
-def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, monitor_dict, **kwargs):
+def simulate(use_fluxes, use_dsmc, use_reactions, use_particles_initialization, use_plotting, use_verbose, monitor_dict, **kwargs):
 
     # ------- Final setup ---------- #
     species = kwargs['species'] # dict
@@ -98,11 +98,12 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
     user_defined_args = kwargs['user_defined_args'] # dict
 
     # initialization of particles
-    particles_initialization = kwargs['particles_initialization']
     particles_in_system = 0
-    for specie, params in particles_initialization.items():
-        containers[specie].add_multiple(ld.initialization.particles.initialize(np.array(points), params['quantity'], params['type'], params['params']))
-        particles_in_system+=params['quantity']
+    if(use_particles_initialization):
+        particles_initialization = kwargs['particles_initialization']
+        for specie, params in particles_initialization.items():
+            containers[specie].add_multiple(ld.initialization.particles.initialize(np.array(points), params['quantity'], params['type'], params['params']))
+            particles_in_system+=params['quantity']
 
     # simulation    
     time_step = kwargs['time_step'] # float
@@ -126,6 +127,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
         remains = np.zeros((len(injected_species))) # finally it's nb_species as we could also add the output species
 
     if(use_dsmc):
+        use_collisions = kwargs['dsmc']['use_collisions'] 
         grid = kwargs['dsmc']['grid']
         resolutions = kwargs['dsmc']['resolutions']
         max_proba = kwargs['dsmc']['max_proba']
@@ -143,7 +145,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
 
     if(use_reactions):
         boundaries_reactions = kwargs['reactions']['boundaries']
-   
+        proba_fns = kwargs['reactions']['proba_fns'] # list of function (or None)
     disable = False
 
     if(use_verbose):
@@ -252,11 +254,12 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
                          index=[iteration]*colliding_particles_positions.shape[0], columns = monitor['wall_collisions'].columns))
 
         if(use_reactions):
-            nb_reactions, happening_reactions_relative_indexes = recombine(results_reflect_particles[0], \
-                containers, boundaries_reactions, masses, species, monitoring) # None if monitoring is False
+            results_recombination = recombine(results_reflect_particles[0], \
+                containers, boundaries_reactions, masses, species, proba_fns, monitoring) # None if monitoring is False
                 # if monitoring is not False, then happening_reactions_relative_indexes is for now a list of 1D-arrays of different sizes
 
             if(monitoring):
+                nb_reactions, happening_reactions_relative_indexes = results_recombination
                 # happening_reactions_relative_indexes is an array that contains the idx of the reactions and -1 if it did not react
                 if(colliding_particles_positions != []):
                     happening_reactions_relative_indexes = np.concatenate(happening_reactions_relative_indexes, axis = 0)
@@ -268,7 +271,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_verbose, mon
                         index=[iteration]*colliding_particles_positions.shape[0], \
                             columns = monitor['wall_collisions'].columns))
 
-        if(use_dsmc):
+        if(use_dsmc and use_collisions):
             # try :
             results_dsmc = dsmc(containers, grid, resolutions, system.get_offsets(), system.get_shape(), \
                 averages, iteration, time_step, max_proba, cell_volume, particles_weight, cross_sections_matrix,\
@@ -466,7 +469,7 @@ def reflect_out_particles(containers, system, reflect_fns, user_generic_args, us
 
     return idxes_gsi, nb_out_particles
 
-def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = False): # catalytic boundary recombination - inplace 
+def recombine(idxes_gsi, containers, reactions, masses, species, proba_fns, monitoring = False): # catalytic boundary recombination - inplace 
     particles_to_add = {}
     arrays = [container.get_array() for specie, container in containers.items()]
     
@@ -478,12 +481,12 @@ def recombine(idxes_gsi, containers, reactions, masses, species, monitoring = Fa
         if type_part in reactions: # all particles colliding are not necessarily in reactions !
             idx_colliding_particles = np.expand_dims(np.array(idxes_gsi[k]), axis = 1)
             results = ld.advection.reactions.react(idx_colliding_particles, arrays = arrays,\
-                 masses = masses, types_dict = species, reactions = reactions[type_part], p = None, monitoring = monitoring)
+                 masses = masses, types_dict = species, reactions = reactions[type_part], p = proba_fns[k], monitoring = monitoring)
             # results = (np.array(reacting_particles), particles_to_add, happening_reactions) if monitoring, else (np.array(reacting_particles), particles_to_add)
             # reacting_particles should be deleted in arrays[k]
             # particles_to_add should be added the the asssociated array
             idxes_gsi[k] = results[0] # updating the actually reacting particles
-            count_reactions.append(len(results[0]))
+            count_reactions+=len(results[0])
             if(monitoring):
                 happening_reactions_relative_indexes.append(results[2])
 
@@ -596,18 +599,22 @@ def setup(p):
 
         fluxes['names'] = [k for k in fluxes['species']]
         
-        if(p['use_dsmc']):
-            densities_dsmc = dsmc['densities_dsmc']
-            densities = np.array([densities_dsmc[species['key_to_int'][k]] for k in fluxes['names']])
-        else:
-            densities = np.array([species['list'][k]['density'] for k in fluxes['names']])
+        densities_injection = np.array([v['density'] for k, v in fluxes['species'].items()])
 
+        if(p['use_dsmc']):
+            densities_injection = 1/w0 * densities_injection
+        #     densities_dsmc = dsmc['densities_dsmc']
+        #     densities = np.array([densities_dsmc[species['key_to_int'][k]] for k in fluxes['names']])
+        # else:
+        #     densities = np.array([species['list'][k]['density'] for k in fluxes['names']])
+        else:
+            densities = densities_injection
         temperatures = np.array([v['temperature'] for k, v in fluxes['species'].items()])
         drifts = np.array([v['drift'] for k, v in fluxes['species'].items()])
         masses = np.array([species['list'][k]['mass'] for k in fluxes['names']])
         mean_speeds = ld.utils.physics.maxwellian_mean_speed(temperatures, masses)
 
-        fluxes['debits'] = ld.utils.physics.maxwellian_flux(densities, mean_speeds)*np.linalg.norm(fluxes['in_wall'][:2]-fluxes['in_wall'][2:])*p['system']['dz']
+        fluxes['debits'] = ld.utils.physics.maxwellian_flux(densities_injection, mean_speeds)*np.linalg.norm(fluxes['in_wall'][:2]-fluxes['in_wall'][2:])*p['system']['dz']
         fluxes['vel_stds'] = ld.utils.physics.gaussian(temperatures, masses)
         fluxes['drifts'] = drifts
 
@@ -639,8 +646,11 @@ def setup(p):
     radii = params_species['radii']
     p['setup']['containers'] = {types[k] : ld.data_structures.Particle(types[k], charges[k], masses[k], radii[k], size_arrays[k]) for k in range(params_species['count'])}
         # particles initialization
-    densities_ = densities if not p['use_dsmc'] else dsmc['densities_dsmc']
-    p['setup']['particles_initialization'] = particles_initialization_setup(p['species']['initialization'], species['key_to_int'], masses, quantities = densities_*volume) 
+    if(p['use_particles_initialization']):
+        densities_ = densities if not p['use_dsmc'] else dsmc['densities_dsmc']
+        p['setup']['particles_initialization'] = particles_initialization_setup(p['species']['initialization'], species['key_to_int'], masses, quantities = densities_*volume) 
+    else : 
+        p['setup']['particles_initialization'] = None
         # verbose
     if(p['use_verbose']):
         p['setup']['verbose'] = {}
@@ -654,6 +664,7 @@ def setup(p):
         # dsmc  
     if(p['use_dsmc']):
         p['setup']['dsmc'] = {}
+        p['setup']['dsmc']['use_collisions'] = p['dsmc']['use_collisions']
         p['setup']['dsmc']['grid'] = ld.data_structures.Grid(dsmc['cells_number'], max_size)
         p['setup']['dsmc']['resolutions'] = dsmc['grid']['resolutions']
         p['setup']['dsmc']['use_same_mass']  = dsmc['use_same_mass']
@@ -667,14 +678,14 @@ def setup(p):
         c = 0
         for i, s in enumerate(species['names']):
             
-            if(s in p['setup']['particles_initialization']): # in particles init - priority to init to
+            if(p['use_particles_initialization'] and s in p['setup']['particles_initialization']): # in particles init - priority to init to
                 params_s = p['setup']['particles_initialization'][s]
                 mean_speeds_init_proba[i] = get_mean_speed(params_s)
             elif(p['use_fluxes'] and s in fluxes['names']): # in fluxes
                 mean_speeds_init_proba[i] = mean_speeds[c]
                 c+=1
             else : # unchanged, but in this case, the particles is 'useless' because it's is not initialized and not injected.
-                   # unless of course it it will becreated trough reactions
+                   # unless of course it it will be created trough reactions
                    # so maybe try a better init here
                 pass
 
@@ -695,6 +706,11 @@ def setup(p):
     if(p['use_reactions']):
         p['setup']['reactions'] = {}        
         p['setup']['reactions']['boundaries'] = ld.advection.reactions.parse(p['reactions']['boundaries'])
+        probas_list = [None]*len(species['int_to_key'])
+        for key, val in p['reactions']['proba'].items():
+            probas_list[species['key_to_int'][key]] = val['proba_fn']
+        p['setup']['reactions']['proba_fns'] = probas_list
+
         # poisson
     if(p['use_poisson']):
         p['setup']['mesh'] = ps.mesh.polygonal(poisson['mesh_resolution'],  np.flip(np.array(points), axis = 0), out_vertices_list = None) # polygonal recieves points in counter-clock order
@@ -809,6 +825,7 @@ def init_max_proba(radii, mean_speeds, nb_cells_in_grid):
                 pmax[i,j] *= 2*mean_speeds[i] * np.pi * 4*radii[i]**2  # we'll take the max proba straight away ?
             else:
                 pmax[i,j] *= np.abs(mean_speeds[i]-mean_speeds[j]) * np.pi * (radii[i]+radii[1])**2   # we'll take the max proba straight away ?z
+            pmax[j,i] = pmax[i,j] # if we dont do that here, then the max proba is 1. (bad idea really)
     return pmax.max(axis = (0,1))
 
 def get_cross_sections(radii):

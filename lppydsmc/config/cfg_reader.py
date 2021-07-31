@@ -20,7 +20,7 @@ def read(filename):
     config = ConfigObj(str(filename), configspec=configspec)
 
     # validating it
-    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check})
+    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check, 'proba_fn' : proba_fn_check})
     results = config.validate(validator)
 
     if results != True:
@@ -58,3 +58,12 @@ def reflect_fn_check(value):
 
 def directory_check(value):
     return (Path.cwd()/Path(value)).resolve()
+
+def proba_fn_check(value):
+    if(value == 'default'):
+        # this by default will in lppydsmc.advection.reactions.react 
+        # be transfered as None and thus a default uniform distribution womm be applied 
+        return None
+    d = {}
+    exec(value, d)
+    return d['proba_fn']
