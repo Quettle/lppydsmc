@@ -28,7 +28,7 @@ def run(argv):
         # resolve allows to go in absolute path (and note relative anymore)
         mod_path = Path(__file__).resolve().parents[1]
         cfg_path = (mod_path/Path(opts[0][1])).resolve()
-        if(opts[0][0] in ('-s','-save')):
+        if(opts[1][0] in ('-s','-save')):
             main(cfg_path, save = True)
         else :
             main(cfg_path, save = False)
