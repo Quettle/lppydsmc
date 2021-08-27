@@ -44,12 +44,13 @@ def solver(mesh, boundary_conditions, charge_density):
             }
 
             charge_density = {
-                'value' : 'max_density-x[0]*(max_density-min_density)/lx',  # must be a string too
+                'value' : '-q*(max_density-x[0]*(max_density-min_density)/lx)',  # must be a string too
                 'degree' : 2,
                 'kwargs' : {
                     'max_density' : 2e17,
                     'min_density' : 1e17,
-                    'lx' : 1.0
+                    'lx' : 1.0,
+                    'q': 1.6e-19,
                 } 
             }
     Returns:
