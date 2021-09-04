@@ -1,2 +1,2 @@
-# TODO: should be the same as in the article by Schullian (2019).
-# not sure how to do it though.
+# TODO: could try the same than in the article by Schullian (2019).
+# not sure yet how to do it though.

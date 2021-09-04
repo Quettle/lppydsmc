@@ -3,15 +3,33 @@ import numpy as np
 
 # ------------------------------- DSMC reactions ---------------------------- #
 
-def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = None): # INPLACE
-    # reactions is a dict listing all available reactions
-    # each of them having probability p
-    # else we suppose uniform distribution
-    # p returns the idx of the reactions that happen in reactions or 0 if there is no reaction
+def react(idx_colliding_particles, arrays, masses, types_dict, reactions, p = None, monitoring = False):
+    """ Take the indexes of the walls-colliding particles of ONLY ONE SPECIES and process recombination-probability on them. By default, it will use a uniform law and a reaction is bound to happen.
+    It is a very basic and approximative funtions.
+
+    Args:
+        idx_colliding_particles (np.ndarray): 1D-ndarray containing the indexes of the colliding particles in the corresponding array of arrays.
+        arrays (list): list of arrays containing each the particles of the associated species, the size of each array is : number of particles x 5. 
+        masses (np.ndarray): Array containing the masses of the species in the simulation. The order is described by *types_dict*.
+        types_dict (dict): Dictionnary associating to species identifiers (e.g. 'I', 'I2', 'I+', 'I-', 'e-' etc.) their corresponding integer identifier
+                           in *idx_colliding_particles*, *arrays* and *masses*.
+        reactions (dict): dict giving the possible reactions for the current species. A reaction is giving by : 'i' :  'R : P1 + P2 + ...' where 'i' is 
+                          an integer starting at 1 (0 is for 'no reaction').
+        p (function, optional): function to compute the integer 'i' for each colliding particles. 0 if no reaction. Defaults to None. 
+        monitoring (bool, optional): If monitoring is True, more computations is done and return value is different. Defaults to False.
+
+    Returns:
+        [np.ndarray, list, np.ndarray (optional)]: returns the index of the reacting particles (and should then be deleted), 
+                                                   also returns the particle to add (array [x,y,vx,vy,vz]), and if monitoring is True, 
+                                                   returns the integer array of happening reactions for every given particles.
+    TODO : 
+        - could use some optimization (initially this function was thought for recombination AND reaction between species consequent to DSMC collisions)
+        - Add an example
+    """
     nb_reactions = reactions['#']
     reactants = reactions['reactants']
 
-    nb_parts = idx_reacting_particles.shape[0]
+    nb_parts = idx_colliding_particles.shape[0]
 
     if(p is None):
         p_ = 1/nb_reactions
@@ -20,99 +38,42 @@ def react(idx_reacting_particles, arrays, masses, types_dict, reactions, p = Non
             return (proba*p_+1).astype(int)
 
     happening_reactions = p(nb_parts)
-
+    
     masses_reactants = [masses[types_dict[reactant]] for reactant in reactants]
-    arrays_reactants = [arrays[types_dict[reactant]] for reactant in reactants] # list of arrays (pointers) towards the arrays containing all the particles of the given reacting particles 
+    # list of arrays (pointers) towards the arrays containing all the particles of the given reacting particles 
+    arrays_reactants = [arrays[types_dict[reactant]] for reactant in reactants] 
 
     particles_to_add = {}
     reacting_particles = []
-    for i,r in enumerate(np.flip(happening_reactions)):
-        if(r == 0):
+    for i, r in enumerate(np.flip(happening_reactions)):
+        if(r == 0): # if r==0, no reaction !
             continue
-        idxes = idx_reacting_particles[i]
+
+        idxes = idx_colliding_particles[i]
 
         reacting_particles.append(idxes)
-        products = reactions[r]
+        products = reactions[str(r)]
 
         masses_products = np.array([masses[types_dict[product]] for product in products])
         reduced_masses_products = 1/np.sum(masses_products) * masses_products 
         part = 1/np.sum(masses_reactants) * sum([masses_reactants[k]*arrays_reactants[k][idxes[k]] for k in range(len(reactants))])
-        # NOTE : in a first approximation, we compute the linear momentum for the reactants and spread it over the products, takin into account the mass of each one
-        # we could instead try something with an spreading angle etc. here every product is leaving the same way.
+
+        # NOTE : in a first approximation, we compute the linear momentum for the reactants and spread it over the products, 
+        # taking into account the mass of each one. We could instead try something with an spreading angle etc. 
+        # Here every product is leaving the same way.
+        
         for k, product in enumerate(products):
             if(product in particles_to_add):
-                particles_to_add[product].append(part*reduced_masses_products[k]) # this is a list
+                particles_to_add[product].append(part*reduced_masses_products[k])
             else:
                 particles_to_add[product] = [part*reduced_masses_products[k]]
-
-            # arrays[types_dict[product]].add(linear_momentum_reactants*reduced_masses_products[k]) # TODO : this does not work as we need a container here... I hope to not use a container as it is a special thing...
-            # probably going to try to return it instead.
-        # NOTE
-        # deleting in the previous array
-        # only issue is : when we have a several reactants, their indexes in their respective array are not sorted for all (we can sort only on one array)
-        # thus posing problems with future collisions ... as the wrong particles will be selected.
-        # no other way of doing it I think, except may be deleting only afterwards ?
-        # yes, that is what we are going to do.
-        # ONCE every particle has been added in the other arrays, we delete all reactants
+    if(monitoring):
+        return np.array(reacting_particles), particles_to_add, happening_reactions
     return np.array(reacting_particles), particles_to_add
+        
+# -------------------------------- Parsing functions to read the reactions ---------------------------------- #
 
-# ----------------------------------- OUSDOAU ------------------------- #
-def basic(arr, count, law): 
-    """ Returns an array containing the indexes of the particles that reacted with the walls according to the law *law*.
-
-    Args:
-        arr (ndarray, float): the array of particles, shape : number of particles x 5 (x,y,vx,vy,vz)
-        count (ndarray, int): array of integers containing the number of times the associated particle in *arr* collided
-        law (function): returns a probability of reactions ...
-    """
-
-    # NOTE : we can sample only for the particles that collided - which would give less computations
-    # however it requires a loop (or a copy)
-    # or we can draw for the whole array of particles which is crearly suboptimal
-    idx_reactions = []
-    mean_proba = 0
-    s = 0
-    for k, c in enumerate(count):
-        if(c>0):
-            s+= 1
-            proba_reaction = law(arr[k], c) # TODO we probably have the wall to consider in the future
-            mean_proba += proba_reaction
-            rdm_uniform_draw = np.random.random() # we can maybe draw them all out (as we are anyway counting the number of colliding particles outside the function)
-            if(proba_reaction > rdm_uniform_draw):
-                idx_reactions.append(k)
-
-    return np.array(idx_reactions, dtype = int), mean_proba/s if s!=0 else 0
-
-def angle_dependance(arr, count, alpha, law): 
-    """ Returns an array containing the indexes of the particles that reacted with the walls according to the law *law*.
-
-    Args:
-        arr (ndarray, float): the array of particles, shape : number of particles x 5 (x,y,vx,vy,vz)
-        count (ndarray, int): array of integers containing the number of times the associated particle in *arr* collided
-        alpha (ndarray, float) : array of float containing the angle between the speed and the normal to the wall it collided
-        law (function): returns a probability of reactions ...
-    """
-
-    # NOTE : we can sample only for the particles that collided - which would give less computations
-    # however it requires a loop (or a copy)
-    # or we can draw for the whole array of particles which is crearly suboptimal
-    idx_reactions = []
-    mean_proba = 0
-    s = 0
-    for k, c in enumerate(count):
-        if(c>0):
-            s+= 1
-            proba_reaction = law(arr[k], c, alpha[k])
-            mean_proba += proba_reaction
-            rdm_uniform_draw = np.random.random() # we can maybe draw them all out (as we are anyway counting the number of colliding particles outside the function)
-            if(proba_reaction > rdm_uniform_draw):
-                idx_reactions.append(k)
-
-    return np.array(idx_reactions, dtype = int), mean_proba/s if s!=0 else 0
-
-
-# -------------------------------- reactions ---------------------------------- #
-
+# TODO : move it to the right place - this is more 'utils' or linked to 'config files reading' or something, right ?
 def parse_file(file):
     with open(file, mode = 'r') as f:
         lines = f.readlines() # returns all lines as a list of strings
@@ -130,13 +91,13 @@ def parse(lines):
             #    # trying to get the st
             if(reactions.__contains__(reacts)):
                 idx_reaction = reactions[reacts]['#'] + 1
-                reactions[reacts.strip()][idx_reaction] = parse_(products)
+                reactions[reacts.strip()][str(idx_reaction)] = parse_(products)
                 reactions[reacts.strip()]['#'] = idx_reaction
             else:
                 reactions[reacts.strip()] = {
                     '#' : 1,
                     'reactants' : parse_(reactants),
-                    1 : parse_(products)
+                    '1' : parse_(products)
                 }
     return reactions
 

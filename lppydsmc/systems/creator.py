@@ -6,30 +6,48 @@ class SystemCreator(object):
     Example : 
         Boundary : type = ndarray ; value = [x1,y1,x2,y2]
     """
-    def __init__(self, segments):
-        """ Initialize a system from a list of segments (2D-ndarray).
+    def __init__(self, segments, idx_out_segments = None):
+        """ Initialize a system from a list of segments (2D-ndarray). The segments have to be given in a clock-wise compared to the inside of the system.
+        It is also the case for the extremities of a segment : (x1,y1)<(x2,y2) clock-wise.
 
         Args:
             segments (2D-ndarray): the list containing all the segments of the system. 
+            idx_out_segments (list, optional): list of the indexes of the out boundaries in segments. Default to None.
         """
-        self.segments, self.a = self._init_segments(segments)
+        self.segments, self.a, self.n = self._init_segments(segments)
         self.min_x, self.max_x, self.min_y, self.max_y = self._init_extremal_values()
+        self.idx_out_segments = idx_out_segments
 
     def _init_segments(self, segments):
+        """ Initialize useful arrays for the simulations : directing vectors for the segments (such that x1 =< x2 and if x1=x2, then y1 =< y2) 
+        and also define the inward normal vectors.
+
+        Args:
+            segments (np.ndarray): 2D arrays of size (number of segments x 4), a segment = [x1,y2,x2,y2]. The segments (and its extremities) are in a clock-wise order.
+
+        Returns:
+            np.ndarray, np.ndarray, np.ndarray: the segments, with segment = [x1,y1,x2,y2] such that x1 =< x2 and if x1=x2, then y1 =< y2, the directing vectors and the normal inward vectors (normalized).
+        """
         segments_ = []
         a = np.zeros((segments.shape[0], 3))
+        normal = [] # normal vectors facing inward (that is why we can not use a to get to the normal vectors but we can use the inital segments)
+                    # defined in a counter-clock wise manner
         for k, segment in enumerate(segments):
             x1, y1, x2, y2 = segment
+            normal.append([y2-y1, x1-x2])
             a[k, 2] = np.linalg.norm(segment[2:]-segment[:2])
             assert((x1!=x2) or (y1!=y2))
-
+            
             if(x1>x2 or (x1==x2 and y1>y2)):
                 segments_.append([x2, y2, x1, y1])
                 a[k, :2] = np.array([x1-x2, y1-y2])/a[k, 2]
             else :
                 segments_.append([x1, y1, x2, y2])
                 a[k, :2] = np.array([x2-x1, y2-y1])/a[k, 2]
-        return np.array(segments_), a
+
+        normal = np.array(normal)
+        norm = np.linalg.norm(normal, axis = 1)
+        return np.array(segments_), a, normal/np.expand_dims(norm, axis = 1)
 
     def _init_extremal_values(self):
         segment_x_list = []
@@ -46,7 +64,7 @@ class SystemCreator(object):
 
     # -------------------------- Getter / Setter --------------- #
 
-    def system_shape(self):
+    def get_shape(self):
         return np.array([self.max_x - self.min_x, self.max_y - self.min_y])
 
     def get_extremal_values(self):
@@ -60,11 +78,17 @@ class SystemCreator(object):
     def get_segments(self):
         return self.segments
     
-
     def get_offsets(self):
         return np.array([self.min_x, self.min_y])
 
     def get_dir_vects(self):
         return self.a
 
+    def get_normal_vectors(self):
+        return self.n
+
+    def get_idx_out_segments(self):
+        return self.idx_out_segments
     
+    def __str__(self) -> str:
+        return f'System : shape = {self.get_shape()} m - offsets = {self.get_offsets()} - {len(self.segments)} segments of which {len(self.idx_out_segments)} are exits'

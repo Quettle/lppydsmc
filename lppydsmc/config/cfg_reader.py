@@ -1,0 +1,69 @@
+from types import resolve_bases
+from configobj import ConfigObj, flatten_errors
+from validate import Validator
+from pathlib import Path
+
+""" *read* is a function that reads a config from a file and convert every field in the right format and fill the necessary not given fields. 
+
+    Please refer to : http://www.voidspace.org.uk/python/articles/configobj.shtml
+    for a detailed explanation of ConfigObj.
+"""
+
+spec_filename = str((Path(__file__).resolve().parents[0]/'spec.ini').resolve())
+
+def read(filename):
+    # loading the config spec
+    configspec = ConfigObj(spec_filename, interpolation=False, list_values=False,
+                        _inspec=True)
+
+    # loading the current filename
+    config = ConfigObj(str(filename), configspec=configspec)
+
+    # validating it
+    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check, 'proba_fn' : proba_fn_check})
+    results = config.validate(validator)
+
+    if results != True:
+        for (section_list, key, _) in flatten_errors(config, results):
+            if key is not None:
+                print ('The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list)))
+            else:
+                if(len(section_list)==1):
+                    print ('The following section was missing: %s ' % ', '.join(section_list))
+                else:
+                    print ('The following sections were missing: %s ' % ', '.join(section_list))
+    return config
+
+# -------------- custom check -------------------- #
+
+# TODO : the default value should not be given there
+# maybe we return 'default'
+# and then we add a dispatcher in the setup phase that simply returns the functions clearly well defined in the integration functions
+# also rename it to integration_fn_check
+def fn_check(value):
+    if(value == 'default'):
+        value = '''import numpy as np
+def fn(arr, time, mass, charge, electric_field):
+    return np.concatenate((arr[:,2:4], np.zeros((arr.shape[0],3))), axis = 1)''' # no acceleration 
+    d = {}
+    exec(value, d)
+    return d['fn']
+
+def reflect_fn_check(value):
+    if(value in ['specular','diffusive','couette']):
+        return value
+    d = {}
+    exec(value, d)
+    return d['reflect_fn']
+
+def directory_check(value):
+    return (Path.cwd()/Path(value)).resolve()
+
+def proba_fn_check(value):
+    if(value == 'default'):
+        # this by default will in lppydsmc.advection.reactions.react 
+        # be transfered as None and thus a default uniform distribution womm be applied 
+        return None
+    d = {}
+    exec(value, d)
+    return d['proba_fn']
