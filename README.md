@@ -101,7 +101,7 @@ Available options :
 - Poisson solver (optional, requires *fenics* install)
 - Monitoring (optional)
 - Verbose (optional)
-- Plotting (optional, requires *plotting* install)
+
 #### 2. Launching a simulation
 - Command line (you need to be in the folder where `run.py` is):
    ```shell
