@@ -192,7 +192,7 @@ def reflect(arr, vr_norm, masses = None):
     """ Reflect particles following their collisions. Reflections are for now purely specular (no randomness).
 
     Args:
-        arr (np.ndarray): 2D-array of size (number of actually colliding couples x 5)
+        arr (np.ndarray): 3D-array of size (number of actually colliding couples x 2 x 5)
         vr_norm (np.ndarray): relative velocity norm for each colliding couple
         masses (np.ndarray, optional): Mass for each particle, for each couple. If mass is the same for every particle, then use None as it simplified the computations.
                                        Defaults to None.

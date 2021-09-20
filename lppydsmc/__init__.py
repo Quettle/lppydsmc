@@ -7,6 +7,7 @@ from lppydsmc import injection
 from lppydsmc import advection
 from lppydsmc import collision
 from lppydsmc import initialization
+from lppydsmc import background_gas
 
 # from . import poisson_solver # not imported so we are not forced to make it
                                # work to run simulations without the need for poisson solver

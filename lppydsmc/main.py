@@ -51,10 +51,14 @@ def main(path_to_cfg, save=True):
                 'offset' : p['monitoring']['offset'],
                 'saver' : saver,
             }
-            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_particles_initialization'], p['use_verbose'], monitor_dict = monitor_dict, **p['setup'])
+            simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], \
+                p['use_particles_initialization'], p['use_background_gas'], p['use_verbose'], \
+                    monitor_dict = monitor_dict, **p['setup'])
 
     else:
-        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], p['use_particles_initialization'], p['use_verbose'], monitor_dict = None, **p['setup'])
+        simulate(p['use_fluxes'], p['use_dsmc'], p['use_reactions'], p['use_plotting'], \
+            p['use_particles_initialization'], p['use_background_gas'], p['use_verbose'], \
+                monitor_dict = None, **p['setup'])
 
     print('SIMULATION FINISHED')
     print('Path to results : {}'.format(p['setup']['path']))
@@ -83,7 +87,7 @@ def convert_object(o):
             return o
 # ----------------- Simulation functions ---------------------- #
 
-def simulate(use_fluxes, use_dsmc, use_reactions, use_particles_initialization, use_plotting, use_verbose, monitor_dict, **kwargs):
+def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_particles_initialization, use_background_gas, use_verbose, monitor_dict, **kwargs):
 
     # ------- Final setup ---------- #
     species = kwargs['species'] # dict
@@ -159,11 +163,14 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_particles_initialization, 
     if(use_plotting):
         import matplotlib.pyplot as plt 
         fig, ax = plt.subplots(constrained_layout = True)
-        if(kwargs['plotting']['plot_distribution']):
-            plot_distribution = kwargs['plotting']['plot_distribution']
+        plot_distribution = kwargs['plotting']['plot_distribution']
+        if(plot_distribution):
             fig2, axes = plt.subplots(2,1,constrained_layout = True)
         period_plotting = kwargs['plotting']['period']
 
+    if(use_background_gas):
+        background_gas_dict = kwargs['background_gas']
+        radii = kwargs['radii']
     # Monitoring    
     monitoring = False
     group_fn = None
@@ -191,7 +198,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_particles_initialization, 
     nb_init_particles = particles_in_system
     nb_injected_particles = 0 if use_fluxes else 'NA'
     nb_collisions_with_walls = 0
-    nb_collisions_dsmc = 0 if use_dsmc else 'NA'
+    nb_collisions_dsmc = 0 if (use_dsmc and use_collisions) else 'NA'
     nb_reactions = 0 if use_reactions else 'NA'
     exec_time = 0
 
@@ -291,8 +298,12 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_particles_initialization, 
                 monitor['dsmc_tracking'] = monitor['dsmc_tracking'].append(pd.DataFrame(results_dsmc[2], \
                     index=[iteration]*results_dsmc[2].shape[0], columns = monitor['dsmc_tracking'].columns))
 
+        if(background_gas_dict):
+            colliding = background_gas(containers = containers, masses = masses, radii = radii, \
+                dt = time_step, monitoring = monitoring, **background_gas_dict)
+            # signature : (containers, masses, radii, gas_mass, gas_radius, gas_dynamic_fn, gas_density_fn, dt, monitoring = False)
         current_time+=time_step
-    
+        
         if(use_plotting and iteration%period_plotting==0):
             ax.clear()
             plot_system(ax, containers, system)
@@ -360,7 +371,7 @@ def plot_velocity_distribution(axes, containers):
     axes[0].set_xlabel('vx (m/s)')
     axes[1].set_xlabel('vy (m/s)')
 
-def init_monitor(use_fluxes, use_dsmc, use_reactions): # 1-layer dictionnary to make saving easier
+def init_monitor(use_fluxes, use_dsmc, use_reactions, use_background_gas = False): # 1-layer dictionnary to make saving easier
     monitor = {}
     monitor['particles'] = pd.DataFrame(columns = ['x','y','vx','vy','vz','species']) # save all particles, index is the iteration
     monitor['wall_collisions'] = pd.DataFrame(columns = ['x','y','species'])
@@ -377,6 +388,9 @@ def init_monitor(use_fluxes, use_dsmc, use_reactions): # 1-layer dictionnary to 
         monitor['wall_collisions'] = pd.DataFrame(columns = ['x','y','species','reaction'])
     else:
         monitor['wall_collisions'] = pd.DataFrame(columns = ['x','y','species'])
+    
+    if(use_background_gas):
+        monitor['background_gas'] = pd.DataFrame(columns = ['x','y','species','proba'])
 
     return monitor
 
@@ -534,14 +548,23 @@ def dsmc(containers, grid, resolutions, system_offsets, system_shape, averages, 
             averages, max_proba, cross_sections, cell_volume, particles_weight, remains_per_cell, masses, monitoring = monitoring, group_fn = group_fn) # inplace for remains_per_cell
     # count_collisions if monitoring = False, else results = count_collisions, collisions, tracking 
     return results
+
+# ----------- background_gas ----------------- #
+def background_gas(containers, masses, radii, gas_mass, gas_radius, gas_dynamic_fn, gas_density_fn, dt, monitoring = False):
+    arrays = [container.get_array() for specie, container in containers.items()]
+    for k in range(len(arrays)):
+        arr = arrays[k]
+        results = ld.background_gas.handler_particles_collisions(arr, dt, radii[k], masses[k], gas_radius, gas_mass, \
+            gas_density_fn, gas_dynamic_fn, monitoring)
+    return results
+
 # ------------------- Processing params ------------------- #
 
 def setup(p):
     p['directory'] = (Path(p['directory'])).resolve()
-
+    
     # converting points to segments (which are then sent to the system creator)
     points = [v for k, v in p['system']['points'].items()]  
-
     p['system']['segments'] = ld.systems.helper.points_to_segments(points)
     system = ld.systems.creator.SystemCreator(p['system']['segments'], p['system']['out_boundaries']['out_boundaries'])
     p['system']['offsets'] = system.get_offsets()
@@ -671,8 +694,7 @@ def setup(p):
 
         # TODO : the setup of mean_speeds should be much better than that. And also, this should be max(sigma*c_r), not max(sigma)max(c_r)
         # we can not multiply those two as mean_speeds can be of a lesser dimension than sigma
-        
-        
+            
         # p['setup']['dsmc']['max_proba'] = 2*np.max(mean_speeds)*np.max(p['setup']['cross_sections_matrix'])*np.ones(p['setup']['dsmc']['grid'].current.shape)
         mean_speeds_init_proba = np.full((len(species['names'])), 1e-15)
         c = 0
@@ -724,6 +746,18 @@ def setup(p):
         p['setup']['schemes'], p['setup']['update_functions'], p['setup']['args_update_functions'] = \
             integration_setup(p['simulation']['integration'], p['setup']['species'], masses, charges)
 
+    if(p['use_background_gas']):
+        p['setup']['background_gas'] = {}
+        p['setup']['background_gas']['gas_mass'] = p['background_gas']['gas_mass']
+        p['setup']['background_gas']['gas_radius'] =  p['background_gas']['gas_radius']
+        path_density_arr = p['background_gas']['gas_density_arr']
+        path_dynamic_arr = p['background_gas']['gas_dynamic_arr']
+        path_x = p['background_gas']['x_arr']
+        path_y = p['background_gas']['y_arr']
+        p['setup']['background_gas']['gas_density_fn'], p['setup']['background_gas']['gas_dynamic_fn'] = \
+            ld.background_gas.interpolate.read_interpolation(path_x, path_y, path_density_arr, path_dynamic_arr)
+
+        p['setup']['radii'] = radii 
     # since it is a inplace function, we dont need to return anything.
     
 # ------------------ utils -------------------------- #

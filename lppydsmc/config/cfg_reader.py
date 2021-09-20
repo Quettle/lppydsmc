@@ -3,6 +3,8 @@ from configobj import ConfigObj, flatten_errors
 from validate import Validator
 from pathlib import Path
 
+import numpy as np
+
 """ *read* is a function that reads a config from a file and convert every field in the right format and fill the necessary not given fields. 
 
     Please refer to : http://www.voidspace.org.uk/python/articles/configobj.shtml
@@ -20,7 +22,8 @@ def read(filename):
     config = ConfigObj(str(filename), configspec=configspec)
 
     # validating it
-    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check, 'proba_fn' : proba_fn_check})
+    validator = Validator({'fn': fn_check, 'reflect_fn' : reflect_fn_check, 'directory' : directory_check, \
+        'proba_fn' : proba_fn_check, 'Path' : path_check, 'dynamic_background_gas' : dynamic_background_gas_check})
     results = config.validate(validator)
 
     if results != True:
@@ -62,8 +65,16 @@ def directory_check(value):
 def proba_fn_check(value):
     if(value == 'default'):
         # this by default will in lppydsmc.advection.reactions.react 
-        # be transfered as None and thus a default uniform distribution womm be applied 
+        # be transfered as None and thus a default uniform distribution will be applied 
         return None
     d = {}
     exec(value, d)
     return d['proba_fn']
+
+def path_check(value):
+    return (Path.cwd()/Path(value)).resolve()
+
+def dynamic_background_gas_check(value):
+    if(value == 'None'):
+        return None
+    return path_check(value)

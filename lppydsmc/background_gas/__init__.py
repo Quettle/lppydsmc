@@ -1,2 +1,4 @@
-# TODO: could try the same than in the article by Schullian (2019).
-# not sure yet how to do it though.
+from . import collider
+from . import interpolate
+
+from .collider import handler_particles_collisions
