@@ -298,7 +298,7 @@ def simulate(use_fluxes, use_dsmc, use_reactions, use_plotting, use_particles_in
                 monitor['dsmc_tracking'] = monitor['dsmc_tracking'].append(pd.DataFrame(results_dsmc[2], \
                     index=[iteration]*results_dsmc[2].shape[0], columns = monitor['dsmc_tracking'].columns))
 
-        if(background_gas_dict):
+        if(use_background_gas):
             colliding = background_gas(containers = containers, masses = masses, radii = radii, \
                 dt = time_step, monitoring = monitoring, **background_gas_dict)
             # signature : (containers, masses, radii, gas_mass, gas_radius, gas_dynamic_fn, gas_density_fn, dt, monitoring = False)
