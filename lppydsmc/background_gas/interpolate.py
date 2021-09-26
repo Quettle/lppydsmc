@@ -32,12 +32,12 @@ def interpolate(df, offsets, shape, system_size, cell_volume, particles_weight, 
 
     return X, Y, density_arr, dynamic_arr
 
-def read_interpolation(path_x, path_y, path_density_arr, path_dynamic_arr = None):
+def read_interpolation(path_x, path_y, path_density_arr, path_dynamic_arr = None, kx = 1, ky = 1):
     X = np.load(path_x, allow_pickle=True)
     Y = np.load(path_y, allow_pickle=True)
     density_arr = np.load(path_density_arr, allow_pickle=True)
 
-    density_fn = RectBivariateSpline(X, Y, density_arr) # RectBivariateSpline is much faster on regular grid.
+    density_fn = RectBivariateSpline(X, Y, density_arr, kx = kx, ky = ky) # RectBivariateSpline is much faster on regular grid.
     
 
     if(path_dynamic_arr is None):
@@ -45,22 +45,22 @@ def read_interpolation(path_x, path_y, path_density_arr, path_dynamic_arr = None
     
     dynamic_arr = np.load(path_dynamic_arr, allow_pickle=True)
 
-    std_fn_vx = RectBivariateSpline(X, Y, dynamic_arr[:,:,0,1])
-    std_fn_vy = RectBivariateSpline(X, Y, dynamic_arr[:,:,1,1])
-    std_fn_vz = RectBivariateSpline(X, Y, dynamic_arr[:,:,2,1])
-    mean_fn_vx = RectBivariateSpline(X, Y, dynamic_arr[:,:,0,0])
-    mean_fn_vy = RectBivariateSpline(X, Y, dynamic_arr[:,:,1,0])
-    mean_fn_vz = RectBivariateSpline(X, Y, dynamic_arr[:,:,2,0])
+    std_fn_vx = RectBivariateSpline(X, Y, dynamic_arr[:,:,0,1], kx = kx, ky = ky)
+    std_fn_vy = RectBivariateSpline(X, Y, dynamic_arr[:,:,1,1], kx = kx, ky = ky)
+    std_fn_vz = RectBivariateSpline(X, Y, dynamic_arr[:,:,2,1], kx = kx, ky = ky)
+    mean_fn_vx = RectBivariateSpline(X, Y, dynamic_arr[:,:,0,0], kx = kx, ky = ky)
+    mean_fn_vy = RectBivariateSpline(X, Y, dynamic_arr[:,:,1,0], kx = kx, ky = ky)
+    mean_fn_vz = RectBivariateSpline(X, Y, dynamic_arr[:,:,2,0], kx = kx, ky = ky)
     
     def dynamic_fn(X,Y):
-        std_vx = np.abs(std_fn_vx.ev(X,Y)) # Take off the np.abs once the negative values have been adresse 
+        std_vx = std_fn_vx.ev(X,Y) # Take off the np.abs once the negative values have been adresse 
         # (possibly by feeding a better grid to the function) 
         # or maybe select max(0, std_vx)
         # which could yield to a better approximation really
         # I just have to check again why we should have this 'Runge' effect here 
         # this is so weird
-        std_vy = np.abs(std_fn_vy.ev(X,Y))
-        std_vz = np.abs(std_fn_vz.ev(X,Y))
+        std_vy = std_fn_vy.ev(X,Y)
+        std_vz = std_fn_vz.ev(X,Y)
         mean_vx = mean_fn_vx.ev(X,Y)
         mean_vy = mean_fn_vy.ev(X,Y)
         mean_vz = mean_fn_vz.ev(X,Y)
