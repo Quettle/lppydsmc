@@ -70,7 +70,7 @@ git clone https://calot@hephaistos.lpp.polytechnique.fr/rhodecode/GIT_REPOSITORI
 cd lppydsmc
 git checkout main
 conda activate NAME_ENV
-python -m pip install e .
+python -m pip install -e .
 ```
 At this point, the package *lppydsmc* will be available in the environment NAME_ENV and you can import it like you would do with `NumPy` and from anywhere:
 ```python
