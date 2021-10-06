@@ -28,7 +28,10 @@ def reflection_functions_dispatcher(value):
         return _couette
     elif(value == 'periodic'):
         return _periodic
-    return _reflect_particle_specular # default functions
+    elif(value == 'specular'):
+        return _reflect_particle_specular
+    else:
+        return value # return the function that was given by the user
 
 def _reflect_particle_specular(arr, **kwargs):
     """ Reflect particles given in a specular manner.
