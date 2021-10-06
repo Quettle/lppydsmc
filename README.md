@@ -1,5 +1,10 @@
 # LPPy-DSMC
 
+
+## Version
+
+- V0.0.1 - 2021/10/06: first addition of the version counter. Proceeding the correction of a bug that prevented the use of custom *reflect_fn* function and the correction of the interpolation points for the background gas so they correspond to the middle of each cell. Small changes in the documentation too.
+
 ## Introduction
 
 **LPPy-DSMC** is both a library containing useful procedures and a script meant to be run using configuration files. It uses `Python` programming language.
@@ -8,6 +13,7 @@ It was designed as a `Direct Simulation Monte Carlo` tool, initially to simulate
 
 ## Table of contents
 - [LPPy-DSMC](#lppy-dsmc)
+  - [Version](#version)
   - [Introduction](#introduction)
   - [Table of contents](#table-of-contents)
   - [Setting the environment](#setting-the-environment)
@@ -16,13 +22,10 @@ It was designed as a `Direct Simulation Monte Carlo` tool, initially to simulate
     - [Basic + fenics](#basic--fenics)
     - [Basic + fenics + plotting](#basic--fenics--plotting)
   - [Installing `lppydsmc`](#installing-lppydsmc)
-  - [Running a simulation](#running-a-simulation)
-    - [Via notebooks](#via-notebooks)
-    - [Via config files](#via-config-files)
-      - [1. Configuration of the simulation](#1-configuration-of-the-simulation)
-      - [2. Launching a simulation](#2-launching-a-simulation)
-      - [3. Analysis of the results](#3-analysis-of-the-results)
-  - [Simulation analysis module](#simulation-analysis-module)
+  - [Running a simulation - config files](#running-a-simulation---config-files)
+    - [1. Configuration of the simulation](#1-configuration-of-the-simulation)
+    - [2. Launching a simulation](#2-launching-a-simulation)
+    - [3. Analysis of the results](#3-analysis-of-the-results)
   - [Specifications file](#specifications-file)
   - [Documentation](#documentation)
     - [Introduction](#introduction-1)
@@ -65,7 +68,7 @@ To install `lppydsmc`:
 ```shell
 git clone https://calot@hephaistos.lpp.polytechnique.fr/rhodecode/GIT_REPOSITORIES/LPP/Users/Calot/lppydsmc
 cd lppydsmc
-git checkout iss10
+git checkout main
 conda activate NAME_ENV
 python -m pip install e .
 ```
@@ -78,15 +81,11 @@ Since it was installed using `pip`, you can uninstall it simply by doing `pip un
 
 > Note: I plan on releasing it to `Pypi` as a package that could be installed using `pip` directly.
 
-## Running a simulation
+## Running a simulation - config files
 
-### Via notebooks
- (Coming soon - if I have the time) 
-To run the notebooks, you will need [ipympl](https://github.com/matplotlib/ipympl) which allows interacting with `matplotlib` plots inside *jupyter lab*. If you do not want to install it, simply replace `%matplotlib widget` by either `%matplotlib notebook` for *jupyter notebook* or `%matplotlib inline` for *jupyter lab*.
-
-### Via config files
 Using the configuration files and the very high level `lppydsmc.main`.
-#### 1. Configuration of the simulation 
+
+### 1. Configuration of the simulation 
 Please, see the [specifications](lppydsmc/config/spec.ini) files or the [examples](./benchmarks/).
 
 Available options :
@@ -97,12 +96,13 @@ Available options :
 - Particles initialization (optional)
 - Injection (optional)
 - DSMC (optional)
+- background gas (optional)
 - Reactions (optional)
 - Poisson solver (optional, requires *fenics* install)
 - Monitoring (optional)
 - Verbose (optional)
 
-#### 2. Launching a simulation
+### 2. Launching a simulation
 - Command line (you need to be in the folder where `run.py` is):
    ```shell
    conda activate ENV_NAME
@@ -119,7 +119,7 @@ The `-s` flag simply tells the algorithm to save the parameters at the end of th
 
 At this point, you should see a progress bar with the current iteration and estimated remaining time before completion (depending on what you chose in the options - this is the default case).
 
-#### 3. Analysis of the results
+### 3. Analysis of the results
 If you chose to monitor the simulations in your options in the configuration file, then an `hdf5` will be available under the path `<dir_path>/<name>/monitoring.h5` where *directory_path* and *name* comes from the configuration file.
 
 You can load the `hdf5` file of your simulation this way :
@@ -132,17 +132,12 @@ You can then explore each dataframes.
 
 Depending on the options you chose, you will find a directory `images` with plots of the state of the system and of the velocity distribution and a file `params.ini` that summarizes the parameters used in the simulation. It encompasses the computed values from the "raw" configuration file.
 
-## Simulation analysis module 
-(TO BE IMPROVED)
-
-A set a useful plotting and analysis tools is available under the folder [plotting](plotting/).
-
 ## Specifications file
 The module takes advantage of the [ConfigObj](https://github.com/DiffSK/configobj) module. A good tutorial is available [here](http://www.voidspace.org.uk/python/articles/configobj.shtml) and you can find the documentation [here](https://configobj.readthedocs.io/en/latest/).
 
 You can find the specification file [here](lppydsmc/config/spec.ini). 
 
-> Note : it will be heavily commented in the future, on the code is under less development.
+> Note : it will be heavily commented in the future, once the code is under less development.
 
 ## Documentation 
 **(IN PROGRESS)**
