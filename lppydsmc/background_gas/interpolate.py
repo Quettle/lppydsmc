@@ -4,7 +4,7 @@ from scipy.interpolate import RectBivariateSpline
 
 
 # this functions is used to create the vectors saved and then interpolated when simulating
-def interpolate(df, offsets, shape, system_size, cell_volume, particles_weight, steady_state = None):
+def interpolate(df, offsets, shape, system_size, cell_volume, particles_weight, dx, dy, steady_state = None):
     df['i'] = ((df['x']-offsets[0])*shape[0]/system_size[0]).astype(int) # i is the index of the cell in the x direction
     df['j'] = ((df['y']-offsets[1])*shape[1]/system_size[1]).astype(int) # j is the index of the cell in the y direction
     
@@ -27,8 +27,9 @@ def interpolate(df, offsets, shape, system_size, cell_volume, particles_weight, 
         density_arr[i,j] = density.loc[i,j]
         dynamic_arr[i,j,:,0] =  mean_vel.loc[i,j]
         dynamic_arr[i,j,:,1] =  std_vel.loc[i,j]
-        
-    X, Y = np.linspace(offsets[0],offsets[0]+system_size[0], shape[0]), np.linspace(offsets[1],offsets[1]+system_size[1], shape[1])
+    
+    # the +/- 0.5*dx / dy is due to the fact that we take the middle of each cell for interpolating points !
+    X, Y = np.linspace(offsets[0]+dx*0.5,offsets[0]+system_size[0]-0.5*dx, shape[0]), np.linspace(offsets[1]+dy*0.5,offsets[1]+system_size[1]-dy*0.5, shape[1])
 
     return X, Y, density_arr, dynamic_arr
 
